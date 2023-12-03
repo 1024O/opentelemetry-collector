@@ -1,44 +1,44 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package ptraceotlp // import "go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
-
 import (
 	"bytes"
 
 	"go.opentelemetry.io/collector/pdata/internal"
 	otlpcollectortrace "go.opentelemetry.io/collector/pdata/internal/data/protogen/collector/trace/v1"
-	"go.opentelemetry.io/collector/pdata/internal/json"
 	"go.opentelemetry.io/collector/pdata/internal/otlp"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/internal/ptracejson"
 )
-
-var jsonUnmarshaler = &ptrace.JSONUnmarshaler{}
 
 // ExportRequest represents the request for gRPC/HTTP client/server.
 // It's a wrapper for ptrace.Traces data.
 type ExportRequest struct {
-	orig  *otlpcollectortrace.ExportTraceServiceRequest
-	state *internal.State
+	orig *otlpcollectortrace.ExportTraceServiceRequest
 }
 
 // NewExportRequest returns an empty ExportRequest.
 func NewExportRequest() ExportRequest {
-	state := internal.StateMutable
-	return ExportRequest{
-		orig:  &otlpcollectortrace.ExportTraceServiceRequest{},
-		state: &state,
-	}
+	return ExportRequest{orig: &otlpcollectortrace.ExportTraceServiceRequest{}}
 }
 
 // NewExportRequestFromTraces returns a ExportRequest from ptrace.Traces.
 // Because ExportRequest is a wrapper for ptrace.Traces,
 // any changes to the provided Traces struct will be reflected in the ExportRequest and vice versa.
 func NewExportRequestFromTraces(td ptrace.Traces) ExportRequest {
-	return ExportRequest{
-		orig:  internal.GetOrigTraces(internal.Traces(td)),
-		state: internal.GetTracesState(internal.Traces(td)),
-	}
+	return ExportRequest{orig: internal.GetOrigTraces(internal.Traces(td))}
 }
 
 // MarshalProto marshals ExportRequest into proto bytes.
@@ -58,7 +58,7 @@ func (ms ExportRequest) UnmarshalProto(data []byte) error {
 // MarshalJSON marshals ExportRequest into JSON bytes.
 func (ms ExportRequest) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
-	if err := json.Marshal(&buf, ms.orig); err != nil {
+	if err := ptracejson.JSONMarshaler.Marshal(&buf, ms.orig); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -66,14 +66,9 @@ func (ms ExportRequest) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmarshalls ExportRequest from JSON bytes.
 func (ms ExportRequest) UnmarshalJSON(data []byte) error {
-	td, err := jsonUnmarshaler.UnmarshalTraces(data)
-	if err != nil {
-		return err
-	}
-	*ms.orig = *internal.GetOrigTraces(internal.Traces(td))
-	return nil
+	return ptracejson.UnmarshalExportTraceServiceRequest(data, ms.orig)
 }
 
 func (ms ExportRequest) Traces() ptrace.Traces {
-	return ptrace.Traces(internal.NewTraces(ms.orig, ms.state))
+	return ptrace.Traces(internal.NewTraces(ms.orig))
 }

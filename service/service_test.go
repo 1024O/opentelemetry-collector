@@ -1,12 +1,22 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package service
 
 import (
 	"bufio"
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -22,18 +32,14 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configtelemetry"
-	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/connector/connectortest"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/collector/extension/extensiontest"
 	"go.opentelemetry.io/collector/extension/zpagesextension"
 	"go.opentelemetry.io/collector/internal/testutil"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/processor/processortest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/service/extensions"
-	"go.opentelemetry.io/collector/service/pipelines"
 	"go.opentelemetry.io/collector/service/telemetry"
 )
 
@@ -56,21 +62,11 @@ type ownMetricsTestCase struct {
 	expectedLabels      map[string]labelValue
 }
 
-var testResourceAttrValue = "resource_attr_test_value" // #nosec G101: Potential hardcoded credentials
+var testResourceAttrValue = "resource_attr_test_value"
 var testInstanceID = "test_instance_id"
 var testServiceVersion = "2022-05-20"
-var testServiceName = "test name"
-
-// prometheusToOtelConv is used to check that the expected resource labels exist as
-// part of the otel resource attributes.
-var prometheusToOtelConv = map[string]string{
-	"service_instance_id": "service.instance.id",
-	"service_name":        "service.name",
-	"service_version":     "service.version",
-}
 
 const metricsVersion = "test version"
-const otelCommand = "otelcoltest"
 
 func ownMetricsTestCases() []ownMetricsTestCase {
 	return []ownMetricsTestCase{{
@@ -84,7 +80,6 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 		// monitor the Collector in production deployments.
 		expectedLabels: map[string]labelValue{
 			"service_instance_id": {state: labelAnyValue},
-			"service_name":        {label: otelCommand, state: labelSpecificValue},
 			"service_version":     {label: metricsVersion, state: labelSpecificValue},
 		},
 	},
@@ -95,31 +90,8 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 			},
 			expectedLabels: map[string]labelValue{
 				"service_instance_id":  {state: labelAnyValue},
-				"service_name":         {label: otelCommand, state: labelSpecificValue},
 				"service_version":      {label: metricsVersion, state: labelSpecificValue},
 				"custom_resource_attr": {label: "resource_attr_test_value", state: labelSpecificValue},
-			},
-		},
-		{
-			name: "override service.name",
-			userDefinedResource: map[string]*string{
-				"service.name": &testServiceName,
-			},
-			expectedLabels: map[string]labelValue{
-				"service_instance_id": {state: labelAnyValue},
-				"service_name":        {label: testServiceName, state: labelSpecificValue},
-				"service_version":     {label: metricsVersion, state: labelSpecificValue},
-			},
-		},
-		{
-			name: "suppress service.name",
-			userDefinedResource: map[string]*string{
-				"service.name": nil,
-			},
-			expectedLabels: map[string]labelValue{
-				"service_instance_id": {state: labelAnyValue},
-				"service_name":        {state: labelNotPresent},
-				"service_version":     {label: metricsVersion, state: labelSpecificValue},
 			},
 		},
 		{
@@ -129,7 +101,6 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 			},
 			expectedLabels: map[string]labelValue{
 				"service_instance_id": {label: "test_instance_id", state: labelSpecificValue},
-				"service_name":        {label: otelCommand, state: labelSpecificValue},
 				"service_version":     {label: metricsVersion, state: labelSpecificValue},
 			},
 		},
@@ -140,7 +111,6 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 			},
 			expectedLabels: map[string]labelValue{
 				"service_instance_id": {state: labelNotPresent},
-				"service_name":        {label: otelCommand, state: labelSpecificValue},
 				"service_version":     {label: metricsVersion, state: labelSpecificValue},
 			},
 		},
@@ -151,7 +121,6 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 			},
 			expectedLabels: map[string]labelValue{
 				"service_instance_id": {state: labelAnyValue},
-				"service_name":        {label: otelCommand, state: labelSpecificValue},
 				"service_version":     {label: "2022-05-20", state: labelSpecificValue},
 			},
 		},
@@ -162,7 +131,6 @@ func ownMetricsTestCases() []ownMetricsTestCase {
 			},
 			expectedLabels: map[string]labelValue{
 				"service_instance_id": {state: labelAnyValue},
-				"service_name":        {label: otelCommand, state: labelSpecificValue},
 				"service_version":     {state: labelNotPresent},
 			},
 		}}
@@ -276,7 +244,7 @@ func testCollectorStartHelper(t *testing.T, useOtel bool, tc ownMetricsTestCase)
 	zpagesAddr := testutil.GetAvailableLocalAddress(t)
 
 	set := newNopSettings()
-	set.BuildInfo = component.BuildInfo{Version: "test version", Command: otelCommand}
+	set.BuildInfo = component.BuildInfo{Version: "test version"}
 	set.Extensions = extension.NewBuilder(
 		map[component.ID]component.Config{component.NewID("zpages"): &zpagesextension.Config{TCPAddr: confignet.TCPAddr{Endpoint: zpagesAddr}}},
 		map[component.Type]extension.Factory{"zpages": zpagesextension.NewFactory()})
@@ -301,8 +269,6 @@ func testCollectorStartHelper(t *testing.T, useOtel bool, tc ownMetricsTestCase)
 		// Sleep for 1 second to ensure the http server is started.
 		time.Sleep(1 * time.Second)
 		assert.True(t, loggingHookCalled)
-
-		assertResourceLabels(t, srv.telemetrySettings.Resource, tc.expectedLabels)
 		if !useOtel {
 			assertMetrics(t, metricsAddr, tc.expectedLabels)
 		}
@@ -342,116 +308,13 @@ func TestServiceTelemetryRestart(t *testing.T) {
 	require.NoError(t, srvTwo.Start(context.Background()))
 
 	// check telemetry server to ensure we get a response
-	require.Eventually(t,
-		func() bool {
-			// #nosec G107
-			resp, err = http.Get(telemetryURL)
-			return err == nil
-		},
-		500*time.Millisecond,
-		100*time.Millisecond,
-		"Must get a valid response from the service",
-	)
+	// #nosec G107
+	resp, err = http.Get(telemetryURL)
+	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Shutdown the new service
-	assert.NoError(t, srvTwo.Shutdown(context.Background()))
-}
-
-func TestExtensionNotificationFailure(t *testing.T) {
-	set := newNopSettings()
-	cfg := newNopConfig()
-
-	var extName component.Type = "configWatcher"
-	configWatcherExtensionFactory := newConfigWatcherExtensionFactory(extName)
-	set.Extensions = extension.NewBuilder(
-		map[component.ID]component.Config{component.NewID(extName): configWatcherExtensionFactory.CreateDefaultConfig()},
-		map[component.Type]extension.Factory{extName: configWatcherExtensionFactory})
-	cfg.Extensions = []component.ID{component.NewID(extName)}
-
-	// Create a service
-	srv, err := New(context.Background(), set, cfg)
-	require.NoError(t, err)
-
-	// Start the service
-	require.Error(t, srv.Start(context.Background()))
-
-	// Shut down the service
-	require.NoError(t, srv.Shutdown(context.Background()))
-}
-
-func TestNilCollectorEffectiveConfig(t *testing.T) {
-	set := newNopSettings()
-	set.CollectorConf = nil
-	cfg := newNopConfig()
-
-	var extName component.Type = "configWatcher"
-	configWatcherExtensionFactory := newConfigWatcherExtensionFactory(extName)
-	set.Extensions = extension.NewBuilder(
-		map[component.ID]component.Config{component.NewID(extName): configWatcherExtensionFactory.CreateDefaultConfig()},
-		map[component.Type]extension.Factory{extName: configWatcherExtensionFactory})
-	cfg.Extensions = []component.ID{component.NewID(extName)}
-
-	// Create a service
-	srv, err := New(context.Background(), set, cfg)
-	require.NoError(t, err)
-
-	// Start the service
-	require.NoError(t, srv.Start(context.Background()))
-
-	// Shut down the service
-	require.NoError(t, srv.Shutdown(context.Background()))
-}
-
-func TestServiceTelemetryLogger(t *testing.T) {
-	srv, err := New(context.Background(), newNopSettings(), newNopConfig())
-	require.NoError(t, err)
-
-	assert.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() {
-		assert.NoError(t, srv.Shutdown(context.Background()))
-	})
-	assert.NotNil(t, srv.telemetrySettings.Logger)
-}
-
-func TestServiceFatalError(t *testing.T) {
-	set := newNopSettings()
-	set.AsyncErrorChannel = make(chan error)
-
-	srv, err := New(context.Background(), set, newNopConfig())
-	require.NoError(t, err)
-
-	assert.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() {
-		assert.NoError(t, srv.Shutdown(context.Background()))
-	})
-
-	go func() {
-		ev := component.NewFatalErrorEvent(assert.AnError)
-		srv.host.notifyComponentStatusChange(&component.InstanceID{}, ev)
-	}()
-
-	err = <-srv.host.asyncErrorChannel
-
-	require.ErrorIs(t, err, assert.AnError)
-}
-
-func assertResourceLabels(t *testing.T, res pcommon.Resource, expectedLabels map[string]labelValue) {
-	for key, labelValue := range expectedLabels {
-		lookupKey, ok := prometheusToOtelConv[key]
-		if !ok {
-			lookupKey = key
-		}
-		value, ok := res.Attributes().Get(lookupKey)
-		switch labelValue.state {
-		case labelNotPresent:
-			assert.False(t, ok)
-		case labelAnyValue:
-			assert.True(t, ok)
-		default:
-			assert.Equal(t, labelValue.label, value.AsString())
-		}
-	}
+	require.NoError(t, srvTwo.Shutdown(context.Background()))
 }
 
 func assertMetrics(t *testing.T, metricsAddr string, expectedLabels map[string]labelValue) {
@@ -526,18 +389,17 @@ func assertZPages(t *testing.T, zpagesAddr string) {
 
 func newNopSettings() Settings {
 	return Settings{
-		BuildInfo:     component.NewDefaultBuildInfo(),
-		CollectorConf: confmap.New(),
-		Receivers:     receivertest.NewNopBuilder(),
-		Processors:    processortest.NewNopBuilder(),
-		Exporters:     exportertest.NewNopBuilder(),
-		Connectors:    connectortest.NewNopBuilder(),
-		Extensions:    extensiontest.NewNopBuilder(),
+		BuildInfo:  component.NewDefaultBuildInfo(),
+		Receivers:  receivertest.NewNopBuilder(),
+		Processors: processortest.NewNopBuilder(),
+		Exporters:  exportertest.NewNopBuilder(),
+		Connectors: connectortest.NewNopBuilder(),
+		Extensions: extensiontest.NewNopBuilder(),
 	}
 }
 
 func newNopConfig() Config {
-	return newNopConfigPipelineConfigs(pipelines.Config{
+	return newNopConfigPipelineConfigs(map[component.ID]*PipelineConfig{
 		component.NewID("traces"): {
 			Receivers:  []component.ID{component.NewID("nop")},
 			Processors: []component.ID{component.NewID("nop")},
@@ -556,9 +418,9 @@ func newNopConfig() Config {
 	})
 }
 
-func newNopConfigPipelineConfigs(pipelineCfgs pipelines.Config) Config {
+func newNopConfigPipelineConfigs(pipelineCfgs map[component.ID]*PipelineConfig) Config {
 	return Config{
-		Extensions: extensions.Config{component.NewID("nop")},
+		Extensions: []component.ID{component.NewID("nop")},
 		Pipelines:  pipelineCfgs,
 		Telemetry: telemetry.Config{
 			Logs: telemetry.LogsConfig{
@@ -566,8 +428,6 @@ func newNopConfigPipelineConfigs(pipelineCfgs pipelines.Config) Config {
 				Development: false,
 				Encoding:    "console",
 				Sampling: &telemetry.LogsSamplingConfig{
-					Enabled:    true,
-					Tick:       10 * time.Second,
 					Initial:    100,
 					Thereafter: 100,
 				},
@@ -583,31 +443,4 @@ func newNopConfigPipelineConfigs(pipelineCfgs pipelines.Config) Config {
 			},
 		},
 	}
-}
-
-type configWatcherExtension struct{}
-
-func (comp *configWatcherExtension) Start(_ context.Context, _ component.Host) error {
-	return nil
-}
-
-func (comp *configWatcherExtension) Shutdown(_ context.Context) error {
-	return nil
-}
-
-func (comp *configWatcherExtension) NotifyConfig(_ context.Context, _ *confmap.Conf) error {
-	return errors.New("Failed to resolve config")
-}
-
-func newConfigWatcherExtensionFactory(name component.Type) extension.Factory {
-	return extension.NewFactory(
-		name,
-		func() component.Config {
-			return &struct{}{}
-		},
-		func(ctx context.Context, set extension.CreateSettings, extension component.Config) (extension.Extension, error) {
-			return &configWatcherExtension{}, nil
-		},
-		component.StabilityLevelDevelopment,
-	)
 }

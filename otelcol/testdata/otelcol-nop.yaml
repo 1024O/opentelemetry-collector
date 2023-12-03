@@ -10,9 +10,6 @@ exporters:
 extensions:
   nop:
 
-connectors:
-  nop/con:
-
 service:
   telemetry:
     metrics:
@@ -22,12 +19,12 @@ service:
     traces:
       receivers: [nop]
       processors: [nop]
-      exporters: [nop, nop/con]
+      exporters: [nop]
     metrics:
       receivers: [nop]
       processors: [nop]
       exporters: [nop]
     logs:
-      receivers: [nop, nop/con]
+      receivers: [nop]
       processors: [nop]
       exporters: [nop]

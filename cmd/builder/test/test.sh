@@ -1,8 +1,4 @@
 #!/bin/bash
-#
-# Copyright The OpenTelemetry Authors
-# SPDX-License-Identifier: Apache-2.0
-
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 WORKSPACE_DIR=$( cd -- "$( dirname "$(dirname "$(dirname -- "${SCRIPT_DIR}")")" )" &> /dev/null && pwd )
 export WORKSPACE_DIR
@@ -32,7 +28,7 @@ test_build_config() {
     echo "Starting test '${test}' at $(date)" >> "${out}/test.log"
 
     final_build_config=$(basename "${build_config}")
-    "${WORKSPACE_DIR}/.tools/envsubst" < "$build_config" > "${out}/${final_build_config}"
+    envsubst < "$build_config" > "${out}/${final_build_config}"
     if ! go run . --go "${GOBIN}" --config "${out}/${final_build_config}" --output-path "${out}" --name otelcol-built-test > "${out}/builder.log" 2>&1; then
         echo "❌ FAIL ${test}. Failed to compile the test ${test}. Build logs:"
         cat "${out}/builder.log"

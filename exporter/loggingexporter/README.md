@@ -2,11 +2,9 @@
 
 | Status                   |                       |
 | ------------------------ |-----------------------|
-| Stability                | [Deprecated]         |
+| Stability                | [Development]         |
 | Supported pipeline types | traces, metrics, logs |
 | Distributions            | [core], [contrib]     |
-
-This exporter is being deprecated in favour of the [debug exporter]. It will be removed in September 2024.
 
 Exports data to the console via zap.Logger.
 
@@ -45,5 +43,4 @@ exporters:
 
 [contrib]: https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-contrib
 [core]: https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol
-[Deprecated]: https://github.com/open-telemetry/opentelemetry-collector#deprecated
-[debug exporter]: ../debugexporter/README.md
+[Development]: https://github.com/open-telemetry/opentelemetry-collector#in-development

@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package otlpexporter
 
@@ -62,8 +73,7 @@ func (r *mockReceiver) setExportError(err error) {
 type mockTracesReceiver struct {
 	ptraceotlp.UnimplementedGRPCServer
 	mockReceiver
-	exportResponse func() ptraceotlp.ExportResponse
-	lastRequest    ptrace.Traces
+	lastRequest ptrace.Traces
 }
 
 func (r *mockTracesReceiver) Export(ctx context.Context, req ptraceotlp.ExportRequest) (ptraceotlp.ExportResponse, error) {
@@ -74,19 +84,13 @@ func (r *mockTracesReceiver) Export(ctx context.Context, req ptraceotlp.ExportRe
 	defer r.mux.Unlock()
 	r.lastRequest = td
 	r.metadata, _ = metadata.FromIncomingContext(ctx)
-	return r.exportResponse(), r.exportError
+	return ptraceotlp.NewExportResponse(), r.exportError
 }
 
 func (r *mockTracesReceiver) getLastRequest() ptrace.Traces {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	return r.lastRequest
-}
-
-func (r *mockTracesReceiver) setExportResponse(fn func() ptraceotlp.ExportResponse) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
-	r.exportResponse = fn
 }
 
 func otlpTracesReceiverOnGRPCServer(ln net.Listener, useTLS bool) (*mockTracesReceiver, error) {
@@ -111,7 +115,6 @@ func otlpTracesReceiverOnGRPCServer(ln net.Listener, useTLS bool) (*mockTracesRe
 			requestCount: &atomic.Int32{},
 			totalItems:   &atomic.Int32{},
 		},
-		exportResponse: ptraceotlp.NewExportResponse,
 	}
 
 	// Now run it as a gRPC server
@@ -126,8 +129,7 @@ func otlpTracesReceiverOnGRPCServer(ln net.Listener, useTLS bool) (*mockTracesRe
 type mockLogsReceiver struct {
 	plogotlp.UnimplementedGRPCServer
 	mockReceiver
-	exportResponse func() plogotlp.ExportResponse
-	lastRequest    plog.Logs
+	lastRequest plog.Logs
 }
 
 func (r *mockLogsReceiver) Export(ctx context.Context, req plogotlp.ExportRequest) (plogotlp.ExportResponse, error) {
@@ -138,19 +140,13 @@ func (r *mockLogsReceiver) Export(ctx context.Context, req plogotlp.ExportReques
 	defer r.mux.Unlock()
 	r.lastRequest = ld
 	r.metadata, _ = metadata.FromIncomingContext(ctx)
-	return r.exportResponse(), r.exportError
+	return plogotlp.NewExportResponse(), r.exportError
 }
 
 func (r *mockLogsReceiver) getLastRequest() plog.Logs {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	return r.lastRequest
-}
-
-func (r *mockLogsReceiver) setExportResponse(fn func() plogotlp.ExportResponse) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
-	r.exportResponse = fn
 }
 
 func otlpLogsReceiverOnGRPCServer(ln net.Listener) *mockLogsReceiver {
@@ -160,7 +156,6 @@ func otlpLogsReceiverOnGRPCServer(ln net.Listener) *mockLogsReceiver {
 			requestCount: &atomic.Int32{},
 			totalItems:   &atomic.Int32{},
 		},
-		exportResponse: plogotlp.NewExportResponse,
 	}
 
 	// Now run it as a gRPC server
@@ -175,8 +170,7 @@ func otlpLogsReceiverOnGRPCServer(ln net.Listener) *mockLogsReceiver {
 type mockMetricsReceiver struct {
 	pmetricotlp.UnimplementedGRPCServer
 	mockReceiver
-	exportResponse func() pmetricotlp.ExportResponse
-	lastRequest    pmetric.Metrics
+	lastRequest pmetric.Metrics
 }
 
 func (r *mockMetricsReceiver) Export(ctx context.Context, req pmetricotlp.ExportRequest) (pmetricotlp.ExportResponse, error) {
@@ -187,19 +181,13 @@ func (r *mockMetricsReceiver) Export(ctx context.Context, req pmetricotlp.Export
 	defer r.mux.Unlock()
 	r.lastRequest = md
 	r.metadata, _ = metadata.FromIncomingContext(ctx)
-	return r.exportResponse(), r.exportError
+	return pmetricotlp.NewExportResponse(), r.exportError
 }
 
 func (r *mockMetricsReceiver) getLastRequest() pmetric.Metrics {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 	return r.lastRequest
-}
-
-func (r *mockMetricsReceiver) setExportResponse(fn func() pmetricotlp.ExportResponse) {
-	r.mux.Lock()
-	defer r.mux.Unlock()
-	r.exportResponse = fn
 }
 
 func otlpMetricsReceiverOnGRPCServer(ln net.Listener) *mockMetricsReceiver {
@@ -209,7 +197,6 @@ func otlpMetricsReceiverOnGRPCServer(ln net.Listener) *mockMetricsReceiver {
 			requestCount: &atomic.Int32{},
 			totalItems:   &atomic.Int32{},
 		},
-		exportResponse: pmetricotlp.NewExportResponse,
 	}
 
 	// Now run it as a gRPC server
@@ -232,9 +219,6 @@ func TestSendTraces(t *testing.T) {
 	// Start an OTLP exporter and point to the receiver.
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig().(*Config)
-	// Disable queuing to ensure that we execute the request when calling ConsumeTraces
-	// otherwise we will not see any errors.
-	cfg.QueueSettings.Enabled = false
 	cfg.GRPCClientSettings = configgrpc.GRPCClientSettings{
 		Endpoint: ln.Addr().String(),
 		TLSSetting: configtls.TLSClientSetting{
@@ -295,22 +279,6 @@ func TestSendTraces(t *testing.T) {
 	require.EqualValues(t, md.Get("header"), expectedHeader)
 	require.Equal(t, len(md.Get("User-Agent")), 1)
 	require.Contains(t, md.Get("User-Agent")[0], "Collector/1.2.3test")
-
-	// Return partial success
-	rcv.setExportResponse(func() ptraceotlp.ExportResponse {
-		response := ptraceotlp.NewExportResponse()
-		partialSuccess := response.PartialSuccess()
-		partialSuccess.SetErrorMessage("Some spans were not ingested")
-		partialSuccess.SetRejectedSpans(1)
-
-		return response
-	})
-
-	// A request with 2 Trace entries.
-	td = testdata.GenerateTraces(2)
-
-	err = exp.ConsumeTraces(context.Background(), td)
-	assert.Error(t, err)
 }
 
 func TestSendTracesWhenEndpointHasHttpScheme(t *testing.T) {
@@ -397,9 +365,6 @@ func TestSendMetrics(t *testing.T) {
 	// Start an OTLP exporter and point to the receiver.
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig().(*Config)
-	// Disable queuing to ensure that we execute the request when calling ConsumeMetrics
-	// otherwise we will not see any errors.
-	cfg.QueueSettings.Enabled = false
 	cfg.GRPCClientSettings = configgrpc.GRPCClientSettings{
 		Endpoint: ln.Addr().String(),
 		TLSSetting: configtls.TLSClientSetting{
@@ -460,31 +425,6 @@ func TestSendMetrics(t *testing.T) {
 	require.EqualValues(t, mdata.Get("header"), expectedHeader)
 	require.Equal(t, len(mdata.Get("User-Agent")), 1)
 	require.Contains(t, mdata.Get("User-Agent")[0], "Collector/1.2.3test")
-
-	st := status.New(codes.InvalidArgument, "Invalid argument")
-	rcv.setExportError(st.Err())
-
-	// Send two metrics..
-	md = testdata.GenerateMetrics(2)
-
-	err = exp.ConsumeMetrics(context.Background(), md)
-	assert.Error(t, err)
-
-	rcv.setExportError(nil)
-
-	// Return partial success
-	rcv.setExportResponse(func() pmetricotlp.ExportResponse {
-		response := pmetricotlp.NewExportResponse()
-		partialSuccess := response.PartialSuccess()
-		partialSuccess.SetErrorMessage("Some data points were not ingested")
-		partialSuccess.SetRejectedDataPoints(1)
-
-		return response
-	})
-
-	// Send two metrics.
-	md = testdata.GenerateMetrics(2)
-	assert.Error(t, exp.ConsumeMetrics(context.Background(), md))
 }
 
 func TestSendTraceDataServerDownAndUp(t *testing.T) {
@@ -687,9 +627,6 @@ func TestSendLogData(t *testing.T) {
 	// Start an OTLP exporter and point to the receiver.
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig().(*Config)
-	// Disable queuing to ensure that we execute the request when calling ConsumeLogs
-	// otherwise we will not see any errors.
-	cfg.QueueSettings.Enabled = false
 	cfg.GRPCClientSettings = configgrpc.GRPCClientSettings{
 		Endpoint: ln.Addr().String(),
 		TLSSetting: configtls.TLSClientSetting{
@@ -744,31 +681,4 @@ func TestSendLogData(t *testing.T) {
 	md := rcv.getMetadata()
 	require.Equal(t, len(md.Get("User-Agent")), 1)
 	require.Contains(t, md.Get("User-Agent")[0], "Collector/1.2.3test")
-
-	st := status.New(codes.InvalidArgument, "Invalid argument")
-	rcv.setExportError(st.Err())
-
-	// A request with 2 log entries.
-	ld = testdata.GenerateLogs(2)
-
-	err = exp.ConsumeLogs(context.Background(), ld)
-	assert.Error(t, err)
-
-	rcv.setExportError(nil)
-
-	// Return partial success
-	rcv.setExportResponse(func() plogotlp.ExportResponse {
-		response := plogotlp.NewExportResponse()
-		partialSuccess := response.PartialSuccess()
-		partialSuccess.SetErrorMessage("Some log records were not ingested")
-		partialSuccess.SetRejectedLogRecords(1)
-
-		return response
-	})
-
-	// A request with 2 log entries.
-	ld = testdata.GenerateLogs(2)
-
-	err = exp.ConsumeLogs(context.Background(), ld)
-	assert.Error(t, err)
 }

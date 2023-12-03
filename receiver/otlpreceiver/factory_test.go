@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package otlpreceiver
 
@@ -51,13 +62,8 @@ func TestCreateTracesReceiver(t *testing.T) {
 			Transport: "tcp",
 		},
 	}
-	defaultHTTPSettings := &HTTPConfig{
-		HTTPServerSettings: &confighttp.HTTPServerSettings{
-			Endpoint: testutil.GetAvailableLocalAddress(t),
-		},
-		TracesURLPath:  defaultTracesURLPath,
-		MetricsURLPath: defaultMetricsURLPath,
-		LogsURLPath:    defaultLogsURLPath,
+	defaultHTTPSettings := &confighttp.HTTPServerSettings{
+		Endpoint: testutil.GetAvailableLocalAddress(t),
 	}
 
 	tests := []struct {
@@ -94,11 +100,8 @@ func TestCreateTracesReceiver(t *testing.T) {
 			cfg: &Config{
 				Protocols: Protocols{
 					GRPC: defaultGRPCSettings,
-					HTTP: &HTTPConfig{
-						HTTPServerSettings: &confighttp.HTTPServerSettings{
-							Endpoint: "localhost:112233",
-						},
-						TracesURLPath: defaultTracesURLPath,
+					HTTP: &confighttp.HTTPServerSettings{
+						Endpoint: "localhost:112233",
 					},
 				},
 			},
@@ -132,13 +135,8 @@ func TestCreateMetricReceiver(t *testing.T) {
 			Transport: "tcp",
 		},
 	}
-	defaultHTTPSettings := &HTTPConfig{
-		HTTPServerSettings: &confighttp.HTTPServerSettings{
-			Endpoint: testutil.GetAvailableLocalAddress(t),
-		},
-		TracesURLPath:  defaultTracesURLPath,
-		MetricsURLPath: defaultMetricsURLPath,
-		LogsURLPath:    defaultLogsURLPath,
+	defaultHTTPSettings := &confighttp.HTTPServerSettings{
+		Endpoint: testutil.GetAvailableLocalAddress(t),
 	}
 
 	tests := []struct {
@@ -175,11 +173,8 @@ func TestCreateMetricReceiver(t *testing.T) {
 			cfg: &Config{
 				Protocols: Protocols{
 					GRPC: defaultGRPCSettings,
-					HTTP: &HTTPConfig{
-						HTTPServerSettings: &confighttp.HTTPServerSettings{
-							Endpoint: "327.0.0.1:1122",
-						},
-						MetricsURLPath: defaultMetricsURLPath,
+					HTTP: &confighttp.HTTPServerSettings{
+						Endpoint: "327.0.0.1:1122",
 					},
 				},
 			},
@@ -212,13 +207,8 @@ func TestCreateLogReceiver(t *testing.T) {
 			Transport: "tcp",
 		},
 	}
-	defaultHTTPSettings := &HTTPConfig{
-		HTTPServerSettings: &confighttp.HTTPServerSettings{
-			Endpoint: testutil.GetAvailableLocalAddress(t),
-		},
-		TracesURLPath:  defaultTracesURLPath,
-		MetricsURLPath: defaultMetricsURLPath,
-		LogsURLPath:    defaultLogsURLPath,
+	defaultHTTPSettings := &confighttp.HTTPServerSettings{
+		Endpoint: testutil.GetAvailableLocalAddress(t),
 	}
 
 	tests := []struct {
@@ -259,11 +249,8 @@ func TestCreateLogReceiver(t *testing.T) {
 			cfg: &Config{
 				Protocols: Protocols{
 					GRPC: defaultGRPCSettings,
-					HTTP: &HTTPConfig{
-						HTTPServerSettings: &confighttp.HTTPServerSettings{
-							Endpoint: "327.0.0.1:1122",
-						},
-						LogsURLPath: defaultLogsURLPath,
+					HTTP: &confighttp.HTTPServerSettings{
+						Endpoint: "327.0.0.1:1122",
 					},
 				},
 			},
@@ -275,10 +262,8 @@ func TestCreateLogReceiver(t *testing.T) {
 			cfg: &Config{
 				Protocols: Protocols{
 					GRPC: defaultGRPCSettings,
-					HTTP: &HTTPConfig{
-						HTTPServerSettings: &confighttp.HTTPServerSettings{
-							Endpoint: "127.0.0.1:1122",
-						},
+					HTTP: &confighttp.HTTPServerSettings{
+						Endpoint: "327.0.0.1:1122",
 					},
 				},
 			},

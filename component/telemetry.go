@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package component // import "go.opentelemetry.io/collector/component"
 
@@ -9,14 +20,8 @@ import (
 	"go.uber.org/zap"
 
 	"go.opentelemetry.io/collector/config/configtelemetry"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
-// TelemetrySettings provides components with APIs to report telemetry.
-//
-// Note: there is a service version of this struct, servicetelemetry.TelemetrySettings, that mirrors
-// this struct with the exception of ReportComponentStatus. When adding or removing anything from
-// this struct consider whether or not the same should be done for the service version.
 type TelemetrySettings struct {
 	// Logger that the factory can use during creation and can pass to the created
 	// component to be used later as well.
@@ -31,51 +36,4 @@ type TelemetrySettings struct {
 	// MetricsLevel controls the level of detail for metrics emitted by the collector.
 	// Experimental: *NOTE* this field is experimental and may be changed or removed.
 	MetricsLevel configtelemetry.Level
-
-	// Resource contains the resource attributes for the collector's telemetry.
-	Resource pcommon.Resource
-
-	// ReportComponentStatus allows a component to report runtime changes in status. The service
-	// will automatically report status for a component during startup and shutdown. Components can
-	// use this method to report status after start and before shutdown. ReportComponentStatus
-	// will only return errors if the API used incorrectly. The two scenarios where an error will
-	// be returned are:
-	//
-	//   - An illegal state transition
-	//   - Calling this method before component startup
-	//
-	// If the API is being used properly, these errors are safe to ignore.
-	ReportComponentStatus StatusFunc
-}
-
-// Deprecated: [0.91.0] Use TelemetrySettings directly
-type TelemetrySettingsBase[T any] struct {
-	// Logger that the factory can use during creation and can pass to the created
-	// component to be used later as well.
-	Logger *zap.Logger
-
-	// TracerProvider that the factory can pass to other instrumented third-party libraries.
-	TracerProvider trace.TracerProvider
-
-	// MeterProvider that the factory can pass to other instrumented third-party libraries.
-	MeterProvider metric.MeterProvider
-
-	// MetricsLevel controls the level of detail for metrics emitted by the collector.
-	// Experimental: *NOTE* this field is experimental and may be changed or removed.
-	MetricsLevel configtelemetry.Level
-
-	// Resource contains the resource attributes for the collector's telemetry.
-	Resource pcommon.Resource
-
-	// ReportComponentStatus allows a component to report runtime changes in status. The service
-	// will automatically report status for a component during startup and shutdown. Components can
-	// use this method to report status after start and before shutdown. ReportComponentStatus
-	// will only return errors if the API used incorrectly. The two scenarios where an error will
-	// be returned are:
-	//
-	//   - An illegal state transition
-	//   - Calling this method before component startup
-	//
-	// If the API is being used properly, these errors are safe to ignore.
-	ReportComponentStatus T
 }

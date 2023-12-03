@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package obsreporttest_test
 
@@ -11,14 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/exporter"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/obsreport/obsreporttest"
-	"go.opentelemetry.io/collector/processor"
-	"go.opentelemetry.io/collector/processor/processorhelper"
-	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/receiverhelper"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
 )
 
 const (
@@ -27,42 +32,42 @@ const (
 )
 
 var (
-	scraperID   = component.NewID("fakeScraper")
-	receiverID  = component.NewID("fakeReicever")
-	processorID = component.NewID("fakeProcessor")
-	exporterID  = component.NewID("fakeExporter")
+	scraper   = component.NewID("fakeScraper")
+	receiver  = component.NewID("fakeReicever")
+	processor = component.NewID("fakeProcessor")
+	exporter  = component.NewID("fakeExporter")
 )
 
 func TestCheckScraperMetricsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
+	tt, err := obsreporttest.SetupTelemetry(receiver)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	s, err := scraperhelper.NewObsReport(scraperhelper.ObsReportSettings{
-		ReceiverID:             receiverID,
-		Scraper:                scraperID,
-		ReceiverCreateSettings: receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	s, err := obsreport.NewScraper(obsreport.ScraperSettings{
+		ReceiverID:             receiver,
+		Scraper:                scraper,
+		ReceiverCreateSettings: tt.ToReceiverCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := s.StartMetricsOp(context.Background())
 	require.NotNil(t, ctx)
 	s.EndMetricsOp(ctx, 7, nil)
 
-	assert.NoError(t, obsreporttest.CheckScraperMetrics(tt, receiverID, scraperID, 7, 0))
-	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiverID, scraperID, 7, 7))
-	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiverID, scraperID, 0, 0))
-	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiverID, scraperID, 0, 7))
+	assert.NoError(t, obsreporttest.CheckScraperMetrics(tt, receiver, scraper, 7, 0))
+	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiver, scraper, 7, 7))
+	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiver, scraper, 0, 0))
+	assert.Error(t, obsreporttest.CheckScraperMetrics(tt, receiver, scraper, 0, 7))
 }
 
 func TestCheckReceiverTracesViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
+	tt, err := obsreporttest.SetupTelemetry(receiver)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	rec, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverID:             receiverID,
+	rec, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             receiver,
 		Transport:              transport,
-		ReceiverCreateSettings: receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+		ReceiverCreateSettings: tt.ToReceiverCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := rec.StartTracesOp(context.Background())
@@ -76,14 +81,14 @@ func TestCheckReceiverTracesViews(t *testing.T) {
 }
 
 func TestCheckReceiverMetricsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
+	tt, err := obsreporttest.SetupTelemetry(receiver)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	rec, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverID:             receiverID,
+	rec, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             receiver,
 		Transport:              transport,
-		ReceiverCreateSettings: receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+		ReceiverCreateSettings: tt.ToReceiverCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := rec.StartMetricsOp(context.Background())
@@ -97,14 +102,14 @@ func TestCheckReceiverMetricsViews(t *testing.T) {
 }
 
 func TestCheckReceiverLogsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
+	tt, err := obsreporttest.SetupTelemetry(receiver)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	rec, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
-		ReceiverID:             receiverID,
+	rec, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             receiver,
 		Transport:              transport,
-		ReceiverCreateSettings: receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+		ReceiverCreateSettings: tt.ToReceiverCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := rec.StartLogsOp(context.Background())
@@ -118,13 +123,13 @@ func TestCheckReceiverLogsViews(t *testing.T) {
 }
 
 func TestCheckProcessorTracesViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(processorID)
+	tt, err := obsreporttest.SetupTelemetry(processor)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	por, err := processorhelper.NewObsReport(processorhelper.ObsReportSettings{
-		ProcessorID:             processorID,
-		ProcessorCreateSettings: processor.CreateSettings{ID: processorID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	por, err := obsreport.NewProcessor(obsreport.ProcessorSettings{
+		ProcessorID:             processor,
+		ProcessorCreateSettings: tt.ToProcessorCreateSettings(),
 	})
 	assert.NoError(t, err)
 
@@ -143,13 +148,13 @@ func TestCheckProcessorTracesViews(t *testing.T) {
 }
 
 func TestCheckProcessorMetricsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(processorID)
+	tt, err := obsreporttest.SetupTelemetry(processor)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	por, err := processorhelper.NewObsReport(processorhelper.ObsReportSettings{
-		ProcessorID:             processorID,
-		ProcessorCreateSettings: processor.CreateSettings{ID: processorID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	por, err := obsreport.NewProcessor(obsreport.ProcessorSettings{
+		ProcessorID:             processor,
+		ProcessorCreateSettings: tt.ToProcessorCreateSettings(),
 	})
 	assert.NoError(t, err)
 
@@ -168,13 +173,13 @@ func TestCheckProcessorMetricsViews(t *testing.T) {
 }
 
 func TestCheckProcessorLogViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(processorID)
+	tt, err := obsreporttest.SetupTelemetry(processor)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	por, err := processorhelper.NewObsReport(processorhelper.ObsReportSettings{
-		ProcessorID:             processorID,
-		ProcessorCreateSettings: processor.CreateSettings{ID: processorID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	por, err := obsreport.NewProcessor(obsreport.ProcessorSettings{
+		ProcessorID:             processor,
+		ProcessorCreateSettings: tt.ToProcessorCreateSettings(),
 	})
 	assert.NoError(t, err)
 
@@ -193,13 +198,13 @@ func TestCheckProcessorLogViews(t *testing.T) {
 }
 
 func TestCheckExporterTracesViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(exporterID)
+	tt, err := obsreporttest.SetupTelemetry(exporter)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	obsrep, err := exporterhelper.NewObsReport(exporterhelper.ObsReportSettings{
-		ExporterID:             exporterID,
-		ExporterCreateSettings: exporter.CreateSettings{ID: exporterID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	obsrep, err := obsreport.NewExporter(obsreport.ExporterSettings{
+		ExporterID:             exporter,
+		ExporterCreateSettings: tt.ToExporterCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := obsrep.StartTracesOp(context.Background())
@@ -213,13 +218,13 @@ func TestCheckExporterTracesViews(t *testing.T) {
 }
 
 func TestCheckExporterMetricsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(exporterID)
+	tt, err := obsreporttest.SetupTelemetry(exporter)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	obsrep, err := exporterhelper.NewObsReport(exporterhelper.ObsReportSettings{
-		ExporterID:             exporterID,
-		ExporterCreateSettings: exporter.CreateSettings{ID: exporterID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	obsrep, err := obsreport.NewExporter(obsreport.ExporterSettings{
+		ExporterID:             exporter,
+		ExporterCreateSettings: tt.ToExporterCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := obsrep.StartMetricsOp(context.Background())
@@ -233,13 +238,13 @@ func TestCheckExporterMetricsViews(t *testing.T) {
 }
 
 func TestCheckExporterLogsViews(t *testing.T) {
-	tt, err := obsreporttest.SetupTelemetry(exporterID)
+	tt, err := obsreporttest.SetupTelemetry(exporter)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, tt.Shutdown(context.Background())) })
 
-	obsrep, err := exporterhelper.NewObsReport(exporterhelper.ObsReportSettings{
-		ExporterID:             exporterID,
-		ExporterCreateSettings: exporter.CreateSettings{ID: exporterID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()},
+	obsrep, err := obsreport.NewExporter(obsreport.ExporterSettings{
+		ExporterID:             exporter,
+		ExporterCreateSettings: tt.ToExporterCreateSettings(),
 	})
 	require.NoError(t, err)
 	ctx := obsrep.StartLogsOp(context.Background())

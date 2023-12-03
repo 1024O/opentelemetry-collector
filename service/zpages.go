@@ -1,16 +1,26 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package service // import "go.opentelemetry.io/collector/service"
 
 import (
 	"net/http"
 	"path"
-	"runtime"
-	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/featuregate"
+	"go.opentelemetry.io/collector/service/internal/runtimeinfo"
 	"go.opentelemetry.io/collector/service/internal/zpages"
 )
 
@@ -21,21 +31,6 @@ const (
 	zExtensionPath = "extensionz"
 	zFeaturePath   = "featurez"
 )
-
-var (
-	// InfoVar is a singleton instance of the Info struct.
-	runtimeInfoVar [][2]string
-)
-
-func init() {
-	runtimeInfoVar = [][2]string{
-		{"StartTimestamp", time.Now().String()},
-		{"Go", runtime.Version()},
-		{"OS", runtime.GOOS},
-		{"Arch", runtime.GOARCH},
-		// Add other valuable runtime information here.
-	}
-}
 
 func (host *serviceHost) RegisterZPages(mux *http.ServeMux, pathPrefix string) {
 	mux.HandleFunc(path.Join(pathPrefix, zServicePath), host.zPagesRequest)
@@ -48,7 +43,7 @@ func (host *serviceHost) zPagesRequest(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	zpages.WriteHTMLPageHeader(w, zpages.HeaderData{Title: "Service " + host.buildInfo.Command})
 	zpages.WriteHTMLPropertiesTable(w, zpages.PropertiesTableData{Name: "Build Info", Properties: getBuildInfoProperties(host.buildInfo)})
-	zpages.WriteHTMLPropertiesTable(w, zpages.PropertiesTableData{Name: "Runtime Info", Properties: runtimeInfoVar})
+	zpages.WriteHTMLPropertiesTable(w, zpages.PropertiesTableData{Name: "Runtime Info", Properties: runtimeinfo.Info()})
 	zpages.WriteHTMLComponentHeader(w, zpages.ComponentHeaderData{
 		Name:              "Pipelines",
 		ComponentEndpoint: zPipelinePath,

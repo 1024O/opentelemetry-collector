@@ -1,6 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
-
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package exporterhelper
 
 import (
@@ -12,13 +22,14 @@ import (
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/exporter/exporterhelper/internal"
 	"go.opentelemetry.io/collector/exporter/exportertest"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
 var (
@@ -34,16 +45,8 @@ var (
 	}
 )
 
-func newNoopObsrepSender(_ *ObsReport) requestSender {
-	return &baseRequestSender{}
-}
-
 func TestBaseExporter(t *testing.T) {
-	be, err := newBaseExporter(defaultSettings, "", false, nil, nil, newNoopObsrepSender)
-	require.NoError(t, err)
-	require.NoError(t, be.Start(context.Background(), componenttest.NewNopHost()))
-	require.NoError(t, be.Shutdown(context.Background()))
-	be, err = newBaseExporter(defaultSettings, "", true, nil, nil, newNoopObsrepSender)
+	be, err := newBaseExporter(defaultSettings, fromOptions(), "", nopRequestUnmarshaler())
 	require.NoError(t, err)
 	require.NoError(t, be.Start(context.Background(), componenttest.NewNopHost()))
 	require.NoError(t, be.Shutdown(context.Background()))
@@ -52,10 +55,13 @@ func TestBaseExporter(t *testing.T) {
 func TestBaseExporterWithOptions(t *testing.T) {
 	want := errors.New("my error")
 	be, err := newBaseExporter(
-		defaultSettings, "", false, nil, nil, newNoopObsrepSender,
-		WithStart(func(ctx context.Context, host component.Host) error { return want }),
-		WithShutdown(func(ctx context.Context) error { return want }),
-		WithTimeout(NewDefaultTimeoutSettings()),
+		defaultSettings,
+		fromOptions(
+			WithStart(func(ctx context.Context, host component.Host) error { return want }),
+			WithShutdown(func(ctx context.Context) error { return want }),
+			WithTimeout(NewDefaultTimeoutSettings())),
+		"",
+		nopRequestUnmarshaler(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, want, be.Start(context.Background(), componenttest.NewNopHost()))
@@ -71,28 +77,12 @@ func checkStatus(t *testing.T, sd sdktrace.ReadOnlySpan, err error) {
 	}
 }
 
-func TestQueueRetryOptionsWithRequestExporter(t *testing.T) {
-	bs, err := newBaseExporter(exportertest.NewNopCreateSettings(), "", true, nil, nil, newNoopObsrepSender,
-		WithRetry(NewDefaultRetrySettings()))
-	require.Nil(t, err)
-	require.True(t, bs.requestExporter)
-	require.Panics(t, func() {
-		_, _ = newBaseExporter(exportertest.NewNopCreateSettings(), "", true, nil, nil, newNoopObsrepSender,
-			WithRetry(NewDefaultRetrySettings()), WithQueue(NewDefaultQueueSettings()))
-	})
+func nopTracePusher() consumer.ConsumeTracesFunc {
+	return func(ctx context.Context, ld ptrace.Traces) error {
+		return nil
+	}
 }
 
-func TestBaseExporterLogging(t *testing.T) {
-	set := exportertest.NewNopCreateSettings()
-	logger, observed := observer.New(zap.DebugLevel)
-	set.Logger = zap.New(logger)
-	rCfg := NewDefaultRetrySettings()
-	rCfg.Enabled = false
-	bs, err := newBaseExporter(set, "", true, nil, nil, newNoopObsrepSender, WithRetry(rCfg))
-	require.Nil(t, err)
-	require.True(t, bs.requestExporter)
-	sendErr := bs.send(context.Background(), newErrorRequest())
-	require.Error(t, sendErr)
-
-	require.Len(t, observed.FilterLevelExact(zap.ErrorLevel).All(), 1)
+func nopRequestUnmarshaler() internal.RequestUnmarshaler {
+	return newTraceRequestUnmarshalerFunc(nopTracePusher())
 }

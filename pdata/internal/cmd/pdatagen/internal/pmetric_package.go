@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package internal // import "go.opentelemetry.io/collector/pdata/internal/cmd/pdatagen/internal"
 
@@ -118,6 +129,7 @@ var metric = &messageValueStruct{
 		&oneOfField{
 			typeName:                   "MetricType",
 			originFieldName:            "Data",
+			originTypePrefix:           "otlpmetrics.Metric_",
 			testValueIdx:               1, // Sum
 			omitOriginFieldNameInNames: true,
 			values: []oneOfValue{
@@ -230,9 +242,10 @@ var numberDataPoint = &messageValueStruct{
 		startTimeField,
 		timeField,
 		&oneOfField{
-			typeName:        "NumberDataPointValueType",
-			originFieldName: "Value",
-			testValueIdx:    0, // Double
+			typeName:         "NumberDataPointValueType",
+			originFieldName:  "Value",
+			originTypePrefix: "otlpmetrics.NumberDataPoint_",
+			testValueIdx:     0, // Double
 			values: []oneOfValue{
 				&oneOfPrimitiveValue{
 					fieldName:       "Double",
@@ -269,13 +282,25 @@ var histogramDataPoint = &messageValueStruct{
 		startTimeField,
 		timeField,
 		countField,
+		optionalDoubleSumField,
 		bucketCountsField,
 		explicitBoundsField,
 		exemplarsField,
 		dataPointFlagsField,
-		sumField,
-		minField,
-		maxField,
+		&optionalPrimitiveValue{
+			fieldName:        "Min",
+			originTypePrefix: "otlpmetrics.HistogramDataPoint_",
+			returnType:       "float64",
+			defaultVal:       "float64(0.0)",
+			testVal:          "float64(9.23)",
+		},
+		&optionalPrimitiveValue{
+			fieldName:        "Max",
+			originTypePrefix: "otlpmetrics.HistogramDataPoint_",
+			returnType:       "float64",
+			defaultVal:       "float64(0.0)",
+			testVal:          "float64(182.55)",
+		},
 	},
 }
 
@@ -296,6 +321,13 @@ var exponentialHistogramDataPoint = &messageValueStruct{
 		startTimeField,
 		timeField,
 		countField,
+		&optionalPrimitiveValue{
+			fieldName:        "Sum",
+			originTypePrefix: "otlpmetrics.ExponentialHistogramDataPoint_",
+			returnType:       "float64",
+			defaultVal:       "float64(0.0)",
+			testVal:          "float64(17.13)",
+		},
 		&primitiveField{
 			fieldName:  "Scale",
 			returnType: "int32",
@@ -318,14 +350,19 @@ var exponentialHistogramDataPoint = &messageValueStruct{
 		},
 		exemplarsField,
 		dataPointFlagsField,
-		sumField,
-		minField,
-		maxField,
-		&primitiveField{
-			fieldName:  "ZeroThreshold",
-			returnType: "float64",
-			defaultVal: "float64(0.0)",
-			testVal:    "float64(0.5)",
+		&optionalPrimitiveValue{
+			fieldName:        "Min",
+			originTypePrefix: "otlpmetrics.ExponentialHistogramDataPoint_",
+			returnType:       "float64",
+			defaultVal:       "float64(0.0)",
+			testVal:          "float64(9.23)",
+		},
+		&optionalPrimitiveValue{
+			fieldName:        "Max",
+			originTypePrefix: "otlpmetrics.ExponentialHistogramDataPoint_",
+			returnType:       "float64",
+			defaultVal:       "float64(0.0)",
+			testVal:          "float64(182.55)",
 		},
 	},
 }
@@ -398,9 +435,10 @@ var exemplar = &messageValueStruct{
 	fields: []baseField{
 		timeField,
 		&oneOfField{
-			typeName:        "ExemplarValueType",
-			originFieldName: "Value",
-			testValueIdx:    1, // Int
+			typeName:         "ExemplarValueType",
+			originFieldName:  "Value",
+			originTypePrefix: "otlpmetrics.Exemplar_",
+			testValueIdx:     1, // Int
 			values: []oneOfValue{
 				&oneOfPrimitiveValue{
 					fieldName:       "Double",
@@ -505,22 +543,10 @@ var aggregationTemporalityField = &primitiveTypedField{
 	},
 }
 
-var sumField = &optionalPrimitiveValue{
-	fieldName:  "Sum",
-	returnType: "float64",
-	defaultVal: "float64(0.0)",
-	testVal:    "float64(17.13)",
-}
-var minField = &optionalPrimitiveValue{
-	fieldName:  "Min",
-	returnType: "float64",
-	defaultVal: "float64(0.0)",
-	testVal:    "float64(9.23)",
-}
-
-var maxField = &optionalPrimitiveValue{
-	fieldName:  "Max",
-	returnType: "float64",
-	defaultVal: "float64(0.0)",
-	testVal:    "float64(182.55)",
+var optionalDoubleSumField = &optionalPrimitiveValue{
+	fieldName:        "Sum",
+	originTypePrefix: "otlpmetrics.HistogramDataPoint_",
+	returnType:       "float64",
+	defaultVal:       "float64(0.0)",
+	testVal:          "float64(17.13)",
 }

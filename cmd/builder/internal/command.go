@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package internal // import "go.opentelemetry.io/collector/cmd/builder/internal"
 
@@ -7,10 +18,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -20,7 +31,6 @@ import (
 )
 
 const (
-	skipGenerateFlag               = "skip-generate"
 	skipCompilationFlag            = "skip-compilation"
 	skipGetModulesFlag             = "skip-get-modules"
 	ldflagsFlag                    = "ldflags"
@@ -31,7 +41,6 @@ const (
 	distributionOutputPathFlag     = "output-path"
 	distributionGoFlag             = "go"
 	distributionModuleFlag         = "module"
-	verboseFlag                    = "verbose"
 )
 
 var (
@@ -65,10 +74,6 @@ configuration is provided, ocb will generate a default Collector.
 				return fmt.Errorf("go not found: %w", err)
 			}
 
-			if err := cfg.SetRequireOtelColModule(); err != nil {
-				return fmt.Errorf("unable to compare otelcol version: %w", err)
-			}
-
 			if err := cfg.ParseModules(); err != nil {
 				return fmt.Errorf("invalid module configuration: %w", err)
 			}
@@ -80,10 +85,8 @@ configuration is provided, ocb will generate a default Collector.
 	cmd.Flags().StringVar(&cfgFile, "config", "", "build configuration file")
 
 	// the distribution parameters, which we accept as CLI flags as well
-	cmd.Flags().BoolVar(&cfg.SkipGenerate, skipGenerateFlag, false, "Whether builder should skip generating go code (default false)")
 	cmd.Flags().BoolVar(&cfg.SkipCompilation, skipCompilationFlag, false, "Whether builder should only generate go code with no compile of the collector (default false)")
 	cmd.Flags().BoolVar(&cfg.SkipGetModules, skipGetModulesFlag, false, "Whether builder should skip updating go.mod and retrieve Go module list (default false)")
-	cmd.Flags().BoolVar(&cfg.Verbose, verboseFlag, false, "Whether builder should print verbose output (default false)")
 	cmd.Flags().StringVar(&cfg.LDFlags, ldflagsFlag, "", `ldflags to include in the "go build" command`)
 	cmd.Flags().StringVar(&cfg.Distribution.Name, distributionNameFlag, "otelcol-custom", "The executable name for the OpenTelemetry Collector distribution")
 	if err := cmd.Flags().MarkDeprecated(distributionNameFlag, "use config distribution::name"); err != nil {
@@ -140,10 +143,7 @@ func initConfig(flags *flag.FlagSet) error {
 
 	// handle env variables
 	if err := k.Load(env.Provider("", ".", func(s string) string {
-		// Only values from the `dist.` group can be set,
-		// and the subfields in `dist.` contain `_` in their names.
-		// All other fields are arrays and the koanf env provider doesn't provide a straightforward way to set arrarys.
-		return strings.Replace(strings.ToLower(s), "dist_", "dist.", 1)
+		return strings.ReplaceAll(s, ".", "_")
 	}), nil); err != nil {
 		return fmt.Errorf("failed to load environment variables: %w", err)
 	}
@@ -171,9 +171,6 @@ func applyCfgFromFile(flags *flag.FlagSet, cfgFromFile builder.Config) {
 	cfg.Replaces = cfgFromFile.Replaces
 	cfg.Excludes = cfgFromFile.Excludes
 
-	if !flags.Changed(skipGenerateFlag) && cfgFromFile.SkipGenerate {
-		cfg.SkipGenerate = cfgFromFile.SkipGenerate
-	}
 	if !flags.Changed(skipCompilationFlag) && cfgFromFile.SkipCompilation {
 		cfg.SkipCompilation = cfgFromFile.SkipCompilation
 	}

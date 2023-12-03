@@ -1,65 +1,107 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package exporterhelper // import "go.opentelemetry.io/collector/exporter/exporterhelper"
 
 import (
 	"context"
-
-	"go.uber.org/multierr"
-	"go.uber.org/zap"
+	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/exporter/exporterhelper/internal"
+	"go.opentelemetry.io/collector/obsreport"
 )
+
+// TimeoutSettings for timeout. The timeout applies to individual attempts to send data to the backend.
+type TimeoutSettings struct {
+	// Timeout is the timeout for every attempt to send data to the backend.
+	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+// NewDefaultTimeoutSettings returns the default settings for TimeoutSettings.
+func NewDefaultTimeoutSettings() TimeoutSettings {
+	return TimeoutSettings{
+		Timeout: 5 * time.Second,
+	}
+}
 
 // requestSender is an abstraction of a sender for a request independent of the type of the data (traces, metrics, logs).
 type requestSender interface {
-	component.Component
-	send(context.Context, Request) error
-	setNextSender(nextSender requestSender)
+	send(req internal.Request) error
 }
 
-type baseRequestSender struct {
+// baseRequest is a base implementation for the internal.Request.
+type baseRequest struct {
+	ctx                        context.Context
+	processingFinishedCallback func()
+}
+
+func (req *baseRequest) Context() context.Context {
+	return req.ctx
+}
+
+func (req *baseRequest) SetContext(ctx context.Context) {
+	req.ctx = ctx
+}
+
+func (req *baseRequest) SetOnProcessingFinished(callback func()) {
+	req.processingFinishedCallback = callback
+}
+
+func (req *baseRequest) OnProcessingFinished() {
+	if req.processingFinishedCallback != nil {
+		req.processingFinishedCallback()
+	}
+}
+
+// baseSettings represents all the options that users can configure.
+type baseSettings struct {
 	component.StartFunc
 	component.ShutdownFunc
-	nextSender requestSender
+	consumerOptions []consumer.Option
+	TimeoutSettings
+	QueueSettings
+	RetrySettings
 }
 
-var _ requestSender = (*baseRequestSender)(nil)
-
-func (b *baseRequestSender) send(ctx context.Context, req Request) error {
-	return b.nextSender.send(ctx, req)
-}
-
-func (b *baseRequestSender) setNextSender(nextSender requestSender) {
-	b.nextSender = nextSender
-}
-
-type errorLoggingRequestSender struct {
-	baseRequestSender
-	logger  *zap.Logger
-	message string
-}
-
-func (l *errorLoggingRequestSender) send(ctx context.Context, req Request) error {
-	err := l.baseRequestSender.send(ctx, req)
-	if err != nil {
-		l.logger.Error(l.message, zap.Int("dropped_items", req.ItemsCount()), zap.Error(err))
+// fromOptions returns the internal options starting from the default and applying all configured options.
+func fromOptions(options ...Option) *baseSettings {
+	// Start from the default options:
+	opts := &baseSettings{
+		TimeoutSettings: NewDefaultTimeoutSettings(),
+		// TODO: Enable queuing by default (call DefaultQueueSettings)
+		QueueSettings: QueueSettings{Enabled: false},
+		// TODO: Enable retry by default (call DefaultRetrySettings)
+		RetrySettings: RetrySettings{Enabled: false},
 	}
-	return err
+
+	for _, op := range options {
+		op(opts)
+	}
+
+	return opts
 }
 
-type obsrepSenderFactory func(obsrep *ObsReport) requestSender
-
-// Option apply changes to baseExporter.
-type Option func(*baseExporter)
+// Option apply changes to baseSettings.
+type Option func(*baseSettings)
 
 // WithStart overrides the default Start function for an exporter.
 // The default start function does nothing and always returns nil.
 func WithStart(start component.StartFunc) Option {
-	return func(o *baseExporter) {
+	return func(o *baseSettings) {
 		o.StartFunc = start
 	}
 }
@@ -67,7 +109,7 @@ func WithStart(start component.StartFunc) Option {
 // WithShutdown overrides the default Shutdown function for an exporter.
 // The default shutdown function does nothing and always returns nil.
 func WithShutdown(shutdown component.ShutdownFunc) Option {
-	return func(o *baseExporter) {
+	return func(o *baseSettings) {
 		o.ShutdownFunc = shutdown
 	}
 }
@@ -75,42 +117,24 @@ func WithShutdown(shutdown component.ShutdownFunc) Option {
 // WithTimeout overrides the default TimeoutSettings for an exporter.
 // The default TimeoutSettings is 5 seconds.
 func WithTimeout(timeoutSettings TimeoutSettings) Option {
-	return func(o *baseExporter) {
-		o.timeoutSender.cfg = timeoutSettings
+	return func(o *baseSettings) {
+		o.TimeoutSettings = timeoutSettings
 	}
 }
 
 // WithRetry overrides the default RetrySettings for an exporter.
 // The default RetrySettings is to disable retries.
-func WithRetry(config RetrySettings) Option {
-	return func(o *baseExporter) {
-		if !config.Enabled {
-			o.retrySender = &errorLoggingRequestSender{
-				logger:  o.set.Logger,
-				message: "Exporting failed. Try enabling retry_on_failure config option to retry on retryable errors",
-			}
-			return
-		}
-		o.retrySender = newRetrySender(config, o.set)
+func WithRetry(retrySettings RetrySettings) Option {
+	return func(o *baseSettings) {
+		o.RetrySettings = retrySettings
 	}
 }
 
 // WithQueue overrides the default QueueSettings for an exporter.
 // The default QueueSettings is to disable queueing.
-// This option cannot be used with the new exporter helpers New[Traces|Metrics|Logs]RequestExporter.
-func WithQueue(config QueueSettings) Option {
-	return func(o *baseExporter) {
-		if o.requestExporter {
-			panic("queueing is not available for the new request exporters yet")
-		}
-		if !config.Enabled {
-			o.queueSender = &errorLoggingRequestSender{
-				logger:  o.set.Logger,
-				message: "Exporting failed. Dropping data. Try enabling sending_queue to survive temporary failures.",
-			}
-			return
-		}
-		o.queueSender = newQueueSender(config, o.set, o.signal, o.marshaler, o.unmarshaler)
+func WithQueue(queueSettings QueueSettings) Option {
+	return func(o *baseSettings) {
+		o.QueueSettings = queueSettings
 	}
 }
 
@@ -118,7 +142,7 @@ func WithQueue(config QueueSettings) Option {
 // The default is non-mutable data.
 // TODO: Verify if we can change the default to be mutable as we do for processors.
 func WithCapabilities(capabilities consumer.Capabilities) Option {
-	return func(o *baseExporter) {
+	return func(o *baseSettings) {
 		o.consumerOptions = append(o.consumerOptions, consumer.WithCapabilities(capabilities))
 	}
 }
@@ -127,95 +151,59 @@ func WithCapabilities(capabilities consumer.Capabilities) Option {
 type baseExporter struct {
 	component.StartFunc
 	component.ShutdownFunc
-
-	requestExporter bool
-	marshaler       RequestMarshaler
-	unmarshaler     RequestUnmarshaler
-	signal          component.DataType
-
-	set    exporter.CreateSettings
-	obsrep *ObsReport
-
-	// Chain of senders that the exporter helper applies before passing the data to the actual exporter.
-	// The data is handled by each sender in the respective order starting from the queueSender.
-	// Most of the senders are optional, and initialized with a no-op path-through sender.
-	queueSender   requestSender
-	obsrepSender  requestSender
-	retrySender   requestSender
-	timeoutSender *timeoutSender // timeoutSender is always initialized.
-
-	consumerOptions []consumer.Option
+	obsrep   *obsExporter
+	sender   requestSender
+	qrSender *queuedRetrySender
 }
 
-// TODO: requestExporter, marshaler, and unmarshaler arguments can be removed when the old exporter helpers will be updated to call the new ones.
-func newBaseExporter(set exporter.CreateSettings, signal component.DataType, requestExporter bool, marshaler RequestMarshaler,
-	unmarshaler RequestUnmarshaler, osf obsrepSenderFactory, options ...Option) (*baseExporter, error) {
+func newBaseExporter(set exporter.CreateSettings, bs *baseSettings, signal component.DataType, reqUnmarshaler internal.RequestUnmarshaler) (*baseExporter, error) {
+	be := &baseExporter{}
 
-	obsReport, err := NewObsReport(ObsReportSettings{ExporterID: set.ID, ExporterCreateSettings: set})
+	var err error
+	be.obsrep, err = newObsExporter(obsreport.ExporterSettings{ExporterID: set.ID, ExporterCreateSettings: set}, globalInstruments)
 	if err != nil {
 		return nil, err
 	}
 
-	be := &baseExporter{
-		requestExporter: requestExporter,
-		marshaler:       marshaler,
-		unmarshaler:     unmarshaler,
-		signal:          signal,
-
-		queueSender:   &baseRequestSender{},
-		obsrepSender:  osf(obsReport),
-		retrySender:   &baseRequestSender{},
-		timeoutSender: &timeoutSender{cfg: NewDefaultTimeoutSettings()},
-
-		set:    set,
-		obsrep: obsReport,
-	}
-
-	for _, op := range options {
-		op(be)
-	}
-	be.connectSenders()
-
-	// If retry sender is disabled then disable requeuing in the queue sender.
-	// TODO: Make re-enqueuing configurable on queue sender instead of relying on retry sender.
-	if qs, ok := be.queueSender.(*queueSender); ok {
-		// if it's not retrySender, then it is disabled.
-		if _, ok = be.retrySender.(*retrySender); !ok {
-			qs.requeuingEnabled = false
+	be.qrSender = newQueuedRetrySender(set.ID, signal, bs.QueueSettings, bs.RetrySettings, reqUnmarshaler, &timeoutSender{cfg: bs.TimeoutSettings}, set.Logger)
+	be.sender = be.qrSender
+	be.StartFunc = func(ctx context.Context, host component.Host) error {
+		// First start the wrapped exporter.
+		if err := bs.StartFunc.Start(ctx, host); err != nil {
+			return err
 		}
-	}
 
+		// If no error then start the queuedRetrySender.
+		return be.qrSender.start(ctx, host)
+	}
+	be.ShutdownFunc = func(ctx context.Context) error {
+		// First shutdown the queued retry sender
+		be.qrSender.shutdown()
+		// Last shutdown the wrapped exporter itself.
+		return bs.ShutdownFunc.Shutdown(ctx)
+	}
 	return be, nil
 }
 
-// send sends the request using the first sender in the chain.
-func (be *baseExporter) send(ctx context.Context, req Request) error {
-	return be.queueSender.send(ctx, req)
+// wrapConsumerSender wraps the consumer sender (the sender that uses retries and timeout) with the given wrapper.
+// This can be used to wrap with observability (create spans, record metrics) the consumer sender.
+func (be *baseExporter) wrapConsumerSender(f func(consumer requestSender) requestSender) {
+	be.qrSender.consumerSender = f(be.qrSender.consumerSender)
 }
 
-// connectSenders connects the senders in the predefined order.
-func (be *baseExporter) connectSenders() {
-	be.queueSender.setNextSender(be.obsrepSender)
-	be.obsrepSender.setNextSender(be.retrySender)
-	be.retrySender.setNextSender(be.timeoutSender)
+// timeoutSender is a requestSender that adds a `timeout` to every request that passes this sender.
+type timeoutSender struct {
+	cfg TimeoutSettings
 }
 
-func (be *baseExporter) Start(ctx context.Context, host component.Host) error {
-	// First start the wrapped exporter.
-	if err := be.StartFunc.Start(ctx, host); err != nil {
-		return err
+func (ts *timeoutSender) send(req internal.Request) error {
+	// Intentionally don't overwrite the context inside the request, because in case of retries deadline will not be
+	// updated because this deadline most likely is before the next one.
+	ctx := req.Context()
+	if ts.cfg.Timeout > 0 {
+		var cancelFunc func()
+		ctx, cancelFunc = context.WithTimeout(req.Context(), ts.cfg.Timeout)
+		defer cancelFunc()
 	}
-
-	// If no error then start the queueSender.
-	return be.queueSender.Start(ctx, host)
-}
-
-func (be *baseExporter) Shutdown(ctx context.Context) error {
-	return multierr.Combine(
-		// First shutdown the retry sender, so it can push any pending requests to back the queue.
-		be.retrySender.Shutdown(ctx),
-		// Then shutdown the queue sender.
-		be.queueSender.Shutdown(ctx),
-		// Last shutdown the wrapped exporter itself.
-		be.ShutdownFunc.Shutdown(ctx))
+	return req.Export(ctx)
 }

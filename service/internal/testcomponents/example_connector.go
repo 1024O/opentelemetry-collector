@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package testcomponents // import "go.opentelemetry.io/collector/service/internal/testcomponents"
 
@@ -32,14 +43,6 @@ var ExampleConnectorFactory = connector.NewFactory(
 
 	connector.WithLogsToTraces(createExampleLogsToTraces, component.StabilityLevelDevelopment),
 	connector.WithLogsToMetrics(createExampleLogsToMetrics, component.StabilityLevelDevelopment),
-	connector.WithLogsToLogs(createExampleLogsToLogs, component.StabilityLevelDevelopment),
-)
-
-var MockForwardConnectorFactory = connector.NewFactory(
-	"mockforward",
-	createExampleConnectorDefaultConfig,
-	connector.WithTracesToTraces(createExampleTracesToTraces, component.StabilityLevelDevelopment),
-	connector.WithMetricsToMetrics(createExampleMetricsToMetrics, component.StabilityLevelDevelopment),
 	connector.WithLogsToLogs(createExampleLogsToLogs, component.StabilityLevelDevelopment),
 )
 
@@ -121,5 +124,5 @@ type ExampleConnector struct {
 }
 
 func (c *ExampleConnector) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: false}
+	return consumer.Capabilities{MutatesData: true}
 }

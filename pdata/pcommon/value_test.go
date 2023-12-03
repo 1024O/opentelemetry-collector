@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package pcommon
 
@@ -11,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go.opentelemetry.io/collector/pdata/internal"
 	otlpcommon "go.opentelemetry.io/collector/pdata/internal/data/protogen/common/v1"
 )
 
@@ -43,36 +53,6 @@ func TestValue(t *testing.T) {
 
 	v = NewValueSlice()
 	assert.EqualValues(t, ValueTypeSlice, v.Type())
-}
-
-func TestValueReadOnly(t *testing.T) {
-	state := internal.StateReadOnly
-	v := newValue(&otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_StringValue{StringValue: "v"}}, &state)
-
-	assert.EqualValues(t, ValueTypeStr, v.Type())
-	assert.EqualValues(t, "v", v.Str())
-	assert.EqualValues(t, 0, v.Int())
-	assert.EqualValues(t, 0, v.Double())
-	assert.False(t, v.Bool())
-	assert.EqualValues(t, ByteSlice{}, v.Bytes())
-	assert.EqualValues(t, Map{}, v.Map())
-	assert.EqualValues(t, Slice{}, v.Slice())
-
-	assert.EqualValues(t, "v", v.AsString())
-
-	assert.Panics(t, func() { v.SetStr("abc") })
-	assert.Panics(t, func() { v.SetInt(123) })
-	assert.Panics(t, func() { v.SetDouble(3.4) })
-	assert.Panics(t, func() { v.SetBool(true) })
-	assert.Panics(t, func() { v.SetEmptyBytes() })
-	assert.Panics(t, func() { v.SetEmptyMap() })
-	assert.Panics(t, func() { v.SetEmptySlice() })
-
-	v2 := NewValueEmpty()
-	v.CopyTo(v2)
-	assert.Equal(t, v.AsRaw(), v2.AsRaw())
-	assert.Panics(t, func() { v2.CopyTo(v) })
-
 }
 
 func TestValueType(t *testing.T) {
@@ -159,8 +139,7 @@ func TestValueMap(t *testing.T) {
 
 	// Test nil KvlistValue case for Map() func.
 	orig := &otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_KvlistValue{KvlistValue: nil}}
-	state := internal.StateMutable
-	m1 = newValue(orig, &state)
+	m1 = newValue(orig)
 	assert.EqualValues(t, Map{}, m1.Map())
 }
 
@@ -197,9 +176,8 @@ func TestValueSlice(t *testing.T) {
 	assert.EqualValues(t, "somestr", v.Str())
 
 	// Test nil values case for Slice() func.
-	state := internal.StateMutable
-	a1 = newValue(&otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_ArrayValue{ArrayValue: nil}}, &state)
-	assert.EqualValues(t, newSlice(nil, nil), a1.Slice())
+	a1 = newValue(&otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_ArrayValue{ArrayValue: nil}})
+	assert.EqualValues(t, newSlice(nil), a1.Slice())
 }
 
 func TestNilOrigSetValue(t *testing.T) {
@@ -233,28 +211,26 @@ func TestNilOrigSetValue(t *testing.T) {
 }
 
 func TestValue_CopyTo(t *testing.T) {
-	state := internal.StateMutable
-
 	// Test nil KvlistValue case for Map() func.
 	dest := NewValueEmpty()
 	orig := &otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_KvlistValue{KvlistValue: nil}}
-	newValue(orig, &state).CopyTo(dest)
+	newValue(orig).CopyTo(dest)
 	assert.Nil(t, dest.getOrig().Value.(*otlpcommon.AnyValue_KvlistValue).KvlistValue)
 
 	// Test nil ArrayValue case for Slice() func.
 	dest = NewValueEmpty()
 	orig = &otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_ArrayValue{ArrayValue: nil}}
-	newValue(orig, &state).CopyTo(dest)
+	newValue(orig).CopyTo(dest)
 	assert.Nil(t, dest.getOrig().Value.(*otlpcommon.AnyValue_ArrayValue).ArrayValue)
 
 	// Test copy empty value.
 	orig = &otlpcommon.AnyValue{}
-	newValue(orig, &state).CopyTo(dest)
+	newValue(orig).CopyTo(dest)
 	assert.Nil(t, dest.getOrig().Value)
 
 	av := NewValueEmpty()
 	destVal := otlpcommon.AnyValue{Value: &otlpcommon.AnyValue_IntValue{}}
-	av.CopyTo(newValue(&destVal, &state))
+	av.CopyTo(newValue(&destVal))
 	assert.EqualValues(t, nil, destVal.Value)
 }
 
@@ -263,8 +239,7 @@ func TestSliceWithNilValues(t *testing.T) {
 		{},
 		{Value: &otlpcommon.AnyValue_StringValue{StringValue: "test_value"}},
 	}
-	state := internal.StateMutable
-	sm := newSlice(&origWithNil, &state)
+	sm := newSlice(&origWithNil)
 
 	val := sm.At(0)
 	assert.EqualValues(t, ValueTypeEmpty, val.Type())

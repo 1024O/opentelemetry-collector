@@ -1,12 +1,21 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package builder
 
 import (
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -35,22 +44,6 @@ func TestGenerateInvalidOutputPath(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to create output path")
 }
 
-func TestSkipGenerate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping the test on Windows, see https://github.com/open-telemetry/opentelemetry-collector/issues/5403")
-	}
-
-	cfg := NewDefaultConfig()
-	cfg.Distribution.OutputPath = t.TempDir()
-	cfg.SkipGenerate = true
-	err := Generate(cfg)
-	require.NoError(t, err)
-	outputFile, err := os.Open(cfg.Distribution.OutputPath)
-	require.NoError(t, err)
-	_, err = outputFile.Readdirnames(1)
-	require.ErrorIs(t, err, io.EOF, "skip generate should leave output directory empty")
-}
-
 func TestGenerateAndCompile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping the test on Windows, see https://github.com/open-telemetry/opentelemetry-collector/issues/5403")
@@ -61,29 +54,21 @@ func TestGenerateAndCompile(t *testing.T) {
 	workspaceDir := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))))
 	replaces := []string{fmt.Sprintf("go.opentelemetry.io/collector => %s", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/component => %s/component", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/config/confignet => %s/config/confignet", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/config/configtelemetry => %s/config/configtelemetry", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/confmap => %s/confmap", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/consumer => %s/consumer", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/connector => %s/connector", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/exporter => %s/exporter", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/exporter/debugexporter => %s/exporter/debugexporter", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/exporter/loggingexporter => %s/exporter/loggingexporter", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/exporter/otlpexporter => %s/exporter/otlpexporter", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/exporter/otlphttpexporter => %s/exporter/otlphttpexporter", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/extension => %s/extension", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/extension/ballastextension => %s/extension/ballastextension", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/extension/zpagesextension => %s/extension/zpagesextension", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/featuregate => %s/featuregate", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/processor => %s/processor", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/processor/batchprocessor => %s/processor/batchprocessor", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/processor/memorylimiterprocessor => %s/processor/memorylimiterprocessor", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/receiver => %s/receiver", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/receiver/otlpreceiver => %s/receiver/otlpreceiver", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/otelcol => %s/otelcol", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/pdata => %s/pdata", workspaceDir),
 		fmt.Sprintf("go.opentelemetry.io/collector/semconv => %s/semconv", workspaceDir),
-		fmt.Sprintf("go.opentelemetry.io/collector/service => %s/service", workspaceDir),
 	}
 
 	testCases := []struct {
@@ -105,7 +90,7 @@ func TestGenerateAndCompile(t *testing.T) {
 				cfg := NewDefaultConfig()
 				cfg.Distribution.OutputPath = t.TempDir()
 				cfg.Replaces = append(cfg.Replaces, replaces...)
-				cfg.LDFlags = `-X "test.gitVersion=0743dc6c6411272b98494a9b32a63378e84c34da" -X "test.gitTag=local-testing" -X "test.goVersion=go version go1.20.7 darwin/amd64"`
+				cfg.LDFlags = `-X "test.gitVersion=0743dc6c6411272b98494a9b32a63378e84c34da" -X "test.gitTag=local-testing" -X "test.goVersion=go version go1.19.4 darwin/amd64"`
 				return cfg
 			},
 		},

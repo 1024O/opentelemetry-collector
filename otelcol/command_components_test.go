@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package otelcol
 
@@ -17,65 +28,26 @@ import (
 )
 
 func TestNewBuildSubCommand(t *testing.T) {
+	factories, err := nopFactories()
+	require.NoError(t, err)
+
 	cfgProvider, err := NewConfigProvider(newDefaultConfigProviderSettings([]string{filepath.Join("testdata", "otelcol-nop.yaml")}))
 	require.NoError(t, err)
 
 	set := CollectorSettings{
 		BuildInfo:      component.NewDefaultBuildInfo(),
-		Factories:      nopFactories,
+		Factories:      factories,
 		ConfigProvider: cfgProvider,
 	}
 	cmd := NewCommand(set)
 	cmd.SetArgs([]string{"components"})
 
 	ExpectedYamlStruct := componentsOutput{
-		BuildInfo: component.NewDefaultBuildInfo(),
-		Receivers: []componentWithStability{{
-			Name: component.Type("nop"),
-			Stability: map[string]string{
-				"logs":    "Stable",
-				"metrics": "Stable",
-				"traces":  "Stable",
-			},
-		}},
-		Processors: []componentWithStability{{
-			Name: component.Type("nop"),
-			Stability: map[string]string{
-				"logs":    "Stable",
-				"metrics": "Stable",
-				"traces":  "Stable",
-			},
-		}},
-		Exporters: []componentWithStability{{
-			Name: component.Type("nop"),
-			Stability: map[string]string{
-				"logs":    "Stable",
-				"metrics": "Stable",
-				"traces":  "Stable",
-			},
-		}},
-		Connectors: []componentWithStability{{
-			Name: component.Type("nop"),
-			Stability: map[string]string{
-				"logs-to-logs":    "Development",
-				"logs-to-metrics": "Development",
-				"logs-to-traces":  "Development",
-
-				"metrics-to-logs":    "Development",
-				"metrics-to-metrics": "Development",
-				"metrics-to-traces":  "Development",
-
-				"traces-to-logs":    "Development",
-				"traces-to-metrics": "Development",
-				"traces-to-traces":  "Development",
-			},
-		}},
-		Extensions: []componentWithStability{{
-			Name: component.Type("nop"),
-			Stability: map[string]string{
-				"extension": "Stable",
-			},
-		}},
+		BuildInfo:  component.NewDefaultBuildInfo(),
+		Receivers:  []component.Type{"nop"},
+		Processors: []component.Type{"nop"},
+		Exporters:  []component.Type{"nop"},
+		Extensions: []component.Type{"nop"},
 	}
 	ExpectedOutput, err := yaml.Marshal(ExpectedYamlStruct)
 	require.NoError(t, err)

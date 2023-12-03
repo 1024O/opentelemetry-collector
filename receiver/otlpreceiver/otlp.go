@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package otlpreceiver // import "go.opentelemetry.io/collector/receiver/otlpreceiver"
 
@@ -18,6 +29,7 @@ import (
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/obsreport"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
@@ -25,7 +37,6 @@ import (
 	"go.opentelemetry.io/collector/receiver/otlpreceiver/internal/logs"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver/internal/metrics"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver/internal/trace"
-	"go.opentelemetry.io/collector/receiver/receiverhelper"
 )
 
 // otlpReceiver is the type that exposes Trace and Metrics reception.
@@ -40,16 +51,16 @@ type otlpReceiver struct {
 	logsReceiver    *logs.Receiver
 	shutdownWG      sync.WaitGroup
 
-	obsrepGRPC *receiverhelper.ObsReport
-	obsrepHTTP *receiverhelper.ObsReport
+	obsrepGRPC *obsreport.Receiver
+	obsrepHTTP *obsreport.Receiver
 
-	settings *receiver.CreateSettings
+	settings receiver.CreateSettings
 }
 
 // newOtlpReceiver just creates the OpenTelemetry receiver services. It is the caller's
 // responsibility to invoke the respective Start*Reception methods as well
 // as the various Stop*Reception methods to end it.
-func newOtlpReceiver(cfg *Config, set *receiver.CreateSettings) (*otlpReceiver, error) {
+func newOtlpReceiver(cfg *Config, set receiver.CreateSettings) (*otlpReceiver, error) {
 	r := &otlpReceiver{
 		cfg:      cfg,
 		settings: set,
@@ -59,18 +70,18 @@ func newOtlpReceiver(cfg *Config, set *receiver.CreateSettings) (*otlpReceiver, 
 	}
 
 	var err error
-	r.obsrepGRPC, err = receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
+	r.obsrepGRPC, err = obsreport.NewReceiver(obsreport.ReceiverSettings{
 		ReceiverID:             set.ID,
 		Transport:              "grpc",
-		ReceiverCreateSettings: *set,
+		ReceiverCreateSettings: set,
 	})
 	if err != nil {
 		return nil, err
 	}
-	r.obsrepHTTP, err = receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
+	r.obsrepHTTP, err = obsreport.NewReceiver(obsreport.ReceiverSettings{
 		ReceiverID:             set.ID,
 		Transport:              "http",
-		ReceiverCreateSettings: *set,
+		ReceiverCreateSettings: set,
 	})
 	if err != nil {
 		return nil, err
@@ -151,7 +162,7 @@ func (r *otlpReceiver) startProtocolServers(host component.Host) error {
 			return err
 		}
 
-		err = r.startHTTPServer(r.cfg.HTTP.HTTPServerSettings, host)
+		err = r.startHTTPServer(r.cfg.HTTP, host)
 		if err != nil {
 			return err
 		}
@@ -189,12 +200,12 @@ func (r *otlpReceiver) registerTraceConsumer(tc consumer.Traces) error {
 	r.tracesReceiver = trace.New(tc, r.obsrepGRPC)
 	httpTracesReceiver := trace.New(tc, r.obsrepHTTP)
 	if r.httpMux != nil {
-		r.httpMux.HandleFunc(r.cfg.HTTP.TracesURLPath, func(resp http.ResponseWriter, req *http.Request) {
+		r.httpMux.HandleFunc("/v1/traces", func(resp http.ResponseWriter, req *http.Request) {
 			if req.Method != http.MethodPost {
 				handleUnmatchedMethod(resp)
 				return
 			}
-			switch getMimeTypeFromContentType(req.Header.Get("Content-Type")) {
+			switch req.Header.Get("Content-Type") {
 			case pbContentType:
 				handleTraces(resp, req, httpTracesReceiver, pbEncoder)
 			case jsonContentType:
@@ -214,12 +225,12 @@ func (r *otlpReceiver) registerMetricsConsumer(mc consumer.Metrics) error {
 	r.metricsReceiver = metrics.New(mc, r.obsrepGRPC)
 	httpMetricsReceiver := metrics.New(mc, r.obsrepHTTP)
 	if r.httpMux != nil {
-		r.httpMux.HandleFunc(r.cfg.HTTP.MetricsURLPath, func(resp http.ResponseWriter, req *http.Request) {
+		r.httpMux.HandleFunc("/v1/metrics", func(resp http.ResponseWriter, req *http.Request) {
 			if req.Method != http.MethodPost {
 				handleUnmatchedMethod(resp)
 				return
 			}
-			switch getMimeTypeFromContentType(req.Header.Get("Content-Type")) {
+			switch req.Header.Get("Content-Type") {
 			case pbContentType:
 				handleMetrics(resp, req, httpMetricsReceiver, pbEncoder)
 			case jsonContentType:
@@ -239,12 +250,12 @@ func (r *otlpReceiver) registerLogsConsumer(lc consumer.Logs) error {
 	r.logsReceiver = logs.New(lc, r.obsrepGRPC)
 	httpLogsReceiver := logs.New(lc, r.obsrepHTTP)
 	if r.httpMux != nil {
-		r.httpMux.HandleFunc(r.cfg.HTTP.LogsURLPath, func(resp http.ResponseWriter, req *http.Request) {
+		r.httpMux.HandleFunc("/v1/logs", func(resp http.ResponseWriter, req *http.Request) {
 			if req.Method != http.MethodPost {
 				handleUnmatchedMethod(resp)
 				return
 			}
-			switch getMimeTypeFromContentType(req.Header.Get("Content-Type")) {
+			switch req.Header.Get("Content-Type") {
 			case pbContentType:
 				handleLogs(resp, req, httpLogsReceiver, pbEncoder)
 			case jsonContentType:

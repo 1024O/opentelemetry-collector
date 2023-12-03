@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package configgrpc
 
@@ -18,7 +29,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 
@@ -36,21 +46,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 )
 
-// testBalancerBuilder facilitates testing validateBalancerName().
-type testBalancerBuilder struct{}
-
-func (testBalancerBuilder) Build(_ balancer.ClientConn, _ balancer.BuildOptions) balancer.Balancer {
-	return nil
-}
-
-func (testBalancerBuilder) Name() string {
-	return "configgrpc_balancer_test"
-}
-
-func init() {
-	balancer.Register(testBalancerBuilder{})
-}
-
 func TestDefaultGrpcClientSettings(t *testing.T) {
 	tt, err := obsreporttest.SetupTelemetry(component.NewID("component"))
 	require.NoError(t, err)
@@ -63,7 +58,7 @@ func TestDefaultGrpcClientSettings(t *testing.T) {
 	}
 	opts, err := gcs.toDialOptions(componenttest.NewNopHost(), tt.TelemetrySettings)
 	assert.NoError(t, err)
-	assert.Len(t, opts, 2)
+	assert.Len(t, opts, 3)
 }
 
 func TestAllGrpcClientSettings(t *testing.T) {
@@ -96,7 +91,6 @@ func TestAllGrpcClientSettings(t *testing.T) {
 				WriteBufferSize: 1024,
 				WaitForReady:    true,
 				BalancerName:    "round_robin",
-				Authority:       "pseudo-authority",
 				Auth:            &configauth.Authentication{AuthenticatorID: component.NewID("testauth")},
 			},
 			host: &mockHost{
@@ -125,7 +119,6 @@ func TestAllGrpcClientSettings(t *testing.T) {
 				WriteBufferSize: 1024,
 				WaitForReady:    true,
 				BalancerName:    "round_robin",
-				Authority:       "pseudo-authority",
 				Auth:            &configauth.Authentication{AuthenticatorID: component.NewID("testauth")},
 			},
 			host: &mockHost{
@@ -153,8 +146,7 @@ func TestAllGrpcClientSettings(t *testing.T) {
 				ReadBufferSize:  1024,
 				WriteBufferSize: 1024,
 				WaitForReady:    true,
-				BalancerName:    "configgrpc_balancer_test",
-				Authority:       "pseudo-authority",
+				BalancerName:    "round_robin",
 				Auth:            &configauth.Authentication{AuthenticatorID: component.NewID("testauth")},
 			},
 			host: &mockHost{
@@ -181,7 +173,7 @@ func TestDefaultGrpcServerSettings(t *testing.T) {
 	}
 	opts, err := gss.toServerOption(componenttest.NewNopHost(), componenttest.NewNopTelemetrySettings())
 	assert.NoError(t, err)
-	assert.Len(t, opts, 3)
+	assert.Len(t, opts, 2)
 }
 
 func TestAllGrpcServerSettingsExceptAuth(t *testing.T) {
@@ -214,7 +206,7 @@ func TestAllGrpcServerSettingsExceptAuth(t *testing.T) {
 	}
 	opts, err := gss.toServerOption(componenttest.NewNopHost(), componenttest.NewNopTelemetrySettings())
 	assert.NoError(t, err)
-	assert.Len(t, opts, 10)
+	assert.Len(t, opts, 9)
 }
 
 func TestGrpcServerAuthSettings(t *testing.T) {
@@ -247,7 +239,7 @@ func TestGRPCClientSettingsError(t *testing.T) {
 		host     component.Host
 	}{
 		{
-			err: "^failed to load TLS config: failed to load CA CertPool File: failed to load cert /doesnt/exist:",
+			err: "^failed to load TLS config: failed to load CA CertPool: failed to load CA /doesnt/exist:",
 			settings: GRPCClientSettings{
 				Headers:     nil,
 				Endpoint:    "",
@@ -263,7 +255,7 @@ func TestGRPCClientSettingsError(t *testing.T) {
 			},
 		},
 		{
-			err: "^failed to load TLS config: failed to load TLS cert and key: for auth via TLS, provide both certificate and key, or neither",
+			err: "^failed to load TLS config: for auth via TLS, either both certificate and key must be supplied, or neither",
 			settings: GRPCClientSettings{
 				Headers:     nil,
 				Endpoint:    "",
@@ -373,7 +365,7 @@ func TestUseSecure(t *testing.T) {
 	}
 	dialOpts, err := gcs.toDialOptions(componenttest.NewNopHost(), tt.TelemetrySettings)
 	assert.NoError(t, err)
-	assert.Len(t, dialOpts, 2)
+	assert.Len(t, dialOpts, 3)
 }
 
 func TestGRPCServerWarning(t *testing.T) {
@@ -433,7 +425,7 @@ func TestGRPCServerSettingsError(t *testing.T) {
 		err      string
 	}{
 		{
-			err: "^failed to load TLS config: failed to load CA CertPool File: failed to load cert /doesnt/exist:",
+			err: "^failed to load TLS config: failed to load CA CertPool: failed to load CA /doesnt/exist:",
 			settings: GRPCServerSettings{
 				NetAddr: confignet.NetAddr{
 					Endpoint:  "127.0.0.1:1234",
@@ -447,7 +439,7 @@ func TestGRPCServerSettingsError(t *testing.T) {
 			},
 		},
 		{
-			err: "^failed to load TLS config: failed to load TLS cert and key: for auth via TLS, provide both certificate and key, or neither",
+			err: "^failed to load TLS config: for auth via TLS, either both certificate and key must be supplied, or neither",
 			settings: GRPCServerSettings{
 				NetAddr: confignet.NetAddr{
 					Endpoint:  "127.0.0.1:1234",

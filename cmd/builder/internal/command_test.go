@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package internal
 
@@ -178,54 +189,11 @@ func Test_applyCfgFromFile(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		{
-			name: "Skip generate false",
-			args: args{
-				flags: flag.NewFlagSet("version=1.0.0", 1),
-				cfgFromFile: builder.Config{
-					Logger:          zap.NewNop(),
-					SkipGenerate:    false,
-					SkipCompilation: true,
-					SkipGetModules:  true,
-					Distribution:    testDistribution,
-				},
-			},
-			want: builder.Config{
-				Logger:          zap.NewNop(),
-				SkipGenerate:    false,
-				SkipCompilation: true,
-				SkipGetModules:  true,
-				Distribution:    testDistribution,
-			},
-			wantErr: false,
-		},
-		{
-			name: "Skip generate true",
-			args: args{
-				flags: flag.NewFlagSet("version=1.0.0", 1),
-				cfgFromFile: builder.Config{
-					Logger:          zap.NewNop(),
-					SkipGenerate:    true,
-					SkipCompilation: true,
-					SkipGetModules:  true,
-					Distribution:    testDistribution,
-				},
-			},
-			want: builder.Config{
-				Logger:          zap.NewNop(),
-				SkipGenerate:    true,
-				SkipCompilation: true,
-				SkipGetModules:  true,
-				Distribution:    testDistribution,
-			},
-			wantErr: false,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			applyCfgFromFile(tt.args.flags, tt.args.cfgFromFile)
 			assert.Equal(t, tt.want.Distribution, cfg.Distribution)
-			assert.Equal(t, tt.want.SkipGenerate, cfg.SkipGenerate)
 			assert.Equal(t, tt.want.SkipCompilation, cfg.SkipCompilation)
 			assert.Equal(t, tt.want.SkipGetModules, cfg.SkipGetModules)
 			assert.Equal(t, tt.want.Excludes, cfg.Excludes)

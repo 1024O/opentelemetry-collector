@@ -1,78 +1,100 @@
 // Copyright The OpenTelemetry Authors
 // Copyright (c) 2019 The Jaeger Authors.
 // Copyright (c) 2017 Uber Technologies, Inc.
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package internal // import "go.opentelemetry.io/collector/exporter/exporterhelper/internal"
 
 import (
-	"context"
+	"sync"
 	"sync/atomic"
-
-	"go.opentelemetry.io/collector/component"
 )
 
 // boundedMemoryQueue implements a producer-consumer exchange similar to a ring buffer queue,
 // where the queue is bounded and if it fills up due to slow consumers, the new items written by
 // the producer are dropped.
-type boundedMemoryQueue[T any] struct {
-	component.StartFunc
-	stopped *atomic.Bool
-	items   chan queueRequest[T]
+type boundedMemoryQueue struct {
+	stopWG   sync.WaitGroup
+	size     *atomic.Uint32
+	stopped  *atomic.Bool
+	items    chan Request
+	capacity uint32
 }
 
 // NewBoundedMemoryQueue constructs the new queue of specified capacity, and with an optional
 // callback for dropped items (e.g. useful to emit metrics).
-func NewBoundedMemoryQueue[T any](capacity int) Queue[T] {
-	return &boundedMemoryQueue[T]{
-		items:   make(chan queueRequest[T], capacity),
-		stopped: &atomic.Bool{},
+func NewBoundedMemoryQueue(capacity int) ProducerConsumerQueue {
+	return &boundedMemoryQueue{
+		items:    make(chan Request, capacity),
+		stopped:  &atomic.Bool{},
+		size:     &atomic.Uint32{},
+		capacity: uint32(capacity),
 	}
 }
 
-// Offer is used by the producer to submit new item to the queue.
-func (q *boundedMemoryQueue[T]) Offer(ctx context.Context, req T) error {
+// StartConsumers starts a given number of goroutines consuming items from the queue
+// and passing them into the consumer callback.
+func (q *boundedMemoryQueue) StartConsumers(numWorkers int, callback func(item Request)) {
+	var startWG sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		q.stopWG.Add(1)
+		startWG.Add(1)
+		go func() {
+			startWG.Done()
+			defer q.stopWG.Done()
+			for item := range q.items {
+				q.size.Add(^uint32(0))
+				callback(item)
+			}
+		}()
+	}
+	startWG.Wait()
+}
+
+// Produce is used by the producer to submit new item to the queue. Returns false in case of queue overflow.
+func (q *boundedMemoryQueue) Produce(item Request) bool {
 	if q.stopped.Load() {
-		return ErrQueueIsStopped
-	}
-
-	select {
-	case q.items <- queueRequest[T]{ctx: ctx, req: req}:
-		return nil
-	default:
-		return ErrQueueIsFull
-	}
-}
-
-// Consume applies the provided function on the head of queue.
-// The call blocks until there is an item available or the queue is stopped.
-// The function returns true when an item is consumed or false if the queue is stopped.
-func (q *boundedMemoryQueue[T]) Consume(consumeFunc func(context.Context, T)) bool {
-	item, ok := <-q.items
-	if !ok {
 		return false
 	}
-	consumeFunc(item.ctx, item.req)
-	return true
+
+	// we might have two concurrent backing queues at the moment
+	// their combined size is stored in q.size, and their combined capacity
+	// should match the capacity of the new queue
+	if q.size.Load() >= q.capacity {
+		return false
+	}
+
+	q.size.Add(1)
+	select {
+	case q.items <- item:
+		return true
+	default:
+		// should not happen, as overflows should have been captured earlier
+		q.size.Add(^uint32(0))
+		return false
+	}
 }
 
-// Shutdown stops accepting items, and stops all consumers. It blocks until all consumers have stopped.
-func (q *boundedMemoryQueue[T]) Shutdown(context.Context) error {
+// Stop stops all consumers, as well as the length reporter if started,
+// and releases the items channel. It blocks until all consumers have stopped.
+func (q *boundedMemoryQueue) Stop() {
 	q.stopped.Store(true) // disable producer
 	close(q.items)
-	return nil
+	q.stopWG.Wait()
 }
 
 // Size returns the current size of the queue
-func (q *boundedMemoryQueue[T]) Size() int {
-	return len(q.items)
-}
-
-func (q *boundedMemoryQueue[T]) Capacity() int {
-	return cap(q.items)
-}
-
-type queueRequest[T any] struct {
-	req T
-	ctx context.Context
+func (q *boundedMemoryQueue) Size() int {
+	return int(q.size.Load())
 }

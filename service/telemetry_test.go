@@ -1,5 +1,16 @@
-// Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+// Copyright  The OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package service
 
@@ -15,16 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
-	"go.opentelemetry.io/contrib/config"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/instrument"
 	"go.uber.org/zap"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/internal/testutil"
-	semconv "go.opentelemetry.io/collector/semconv/v1.18.0"
-	"go.opentelemetry.io/collector/service/internal/proctelemetry"
-	"go.opentelemetry.io/collector/service/internal/servicetelemetry"
+	semconv "go.opentelemetry.io/collector/semconv/v1.5.0"
 	"go.opentelemetry.io/collector/service/telemetry"
 )
 
@@ -32,29 +41,22 @@ const (
 	metricPrefix = "otelcol_"
 	otelPrefix   = "otel_sdk_"
 	ocPrefix     = "oc_sdk_"
-	grpcPrefix   = "gprc_"
-	httpPrefix   = "http_"
 	counterName  = "test_counter"
 )
 
-func TestBuildResource(t *testing.T) {
+func TestBuildTelAttrs(t *testing.T) {
 	buildInfo := component.NewDefaultBuildInfo()
 
 	// Check default config
 	cfg := telemetry.Config{}
-	otelRes := buildResource(buildInfo, cfg)
-	res := pdataFromSdk(otelRes)
+	telAttrs := buildTelAttrs(buildInfo, cfg)
 
-	assert.Equal(t, res.Attributes().Len(), 3)
-	value, ok := res.Attributes().Get(semconv.AttributeServiceName)
-	assert.True(t, ok)
-	assert.Equal(t, buildInfo.Command, value.AsString())
-	value, ok = res.Attributes().Get(semconv.AttributeServiceVersion)
-	assert.True(t, ok)
-	assert.Equal(t, buildInfo.Version, value.AsString())
+	assert.Len(t, telAttrs, 3)
+	assert.Equal(t, buildInfo.Command, telAttrs[semconv.AttributeServiceName])
+	assert.Equal(t, buildInfo.Version, telAttrs[semconv.AttributeServiceVersion])
 
-	_, ok = res.Attributes().Get(semconv.AttributeServiceInstanceID)
-	assert.True(t, ok)
+	_, exists := telAttrs[semconv.AttributeServiceInstanceID]
+	assert.True(t, exists)
 
 	// Check override by nil
 	cfg = telemetry.Config{
@@ -64,11 +66,10 @@ func TestBuildResource(t *testing.T) {
 			semconv.AttributeServiceInstanceID: nil,
 		},
 	}
-	otelRes = buildResource(buildInfo, cfg)
-	res = pdataFromSdk(otelRes)
+	telAttrs = buildTelAttrs(buildInfo, cfg)
 
 	// Attributes should not exist since we nil-ified all.
-	assert.Equal(t, res.Attributes().Len(), 0)
+	assert.Len(t, telAttrs, 0)
 
 	// Check override values
 	strPtr := func(v string) *string { return &v }
@@ -79,19 +80,12 @@ func TestBuildResource(t *testing.T) {
 			semconv.AttributeServiceInstanceID: strPtr("c"),
 		},
 	}
-	otelRes = buildResource(buildInfo, cfg)
-	res = pdataFromSdk(otelRes)
+	telAttrs = buildTelAttrs(buildInfo, cfg)
 
-	assert.Equal(t, res.Attributes().Len(), 3)
-	value, ok = res.Attributes().Get(semconv.AttributeServiceName)
-	assert.True(t, ok)
-	assert.Equal(t, "a", value.AsString())
-	value, ok = res.Attributes().Get(semconv.AttributeServiceVersion)
-	assert.True(t, ok)
-	assert.Equal(t, "b", value.AsString())
-	value, ok = res.Attributes().Get(semconv.AttributeServiceInstanceID)
-	assert.True(t, ok)
-	assert.Equal(t, "c", value.AsString())
+	assert.Len(t, telAttrs, 3)
+	assert.Equal(t, "a", telAttrs[semconv.AttributeServiceName])
+	assert.Equal(t, "b", telAttrs[semconv.AttributeServiceVersion])
+	assert.Equal(t, "c", telAttrs[semconv.AttributeServiceInstanceID])
 }
 
 func TestTelemetryInit(t *testing.T) {
@@ -103,10 +97,7 @@ func TestTelemetryInit(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		useOtel         bool
-		disableHighCard bool
 		expectedMetrics map[string]metricValue
-		extendedConfig  bool
-		cfg             *telemetry.Config
 	}{
 		{
 			name:    "UseOpenCensusForInternalMetrics",
@@ -126,161 +117,15 @@ func TestTelemetryInit(t *testing.T) {
 			name:    "UseOpenTelemetryForInternalMetrics",
 			useOtel: true,
 			expectedMetrics: map[string]metricValue{
-				metricPrefix + ocPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
+				metricPrefix + ocPrefix + counterName + "_total": {
+					value:  13,
+					labels: map[string]string{},
 				},
-				metricPrefix + otelPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
+				metricPrefix + otelPrefix + counterName + "_total": {
+					value:  13,
+					labels: map[string]string{},
 				},
-				metricPrefix + grpcPrefix + counterName: {
-					value: 11,
-					labels: map[string]string{
-						"net_sock_peer_addr":  "",
-						"net_sock_peer_name":  "",
-						"net_sock_peer_port":  "",
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + httpPrefix + counterName: {
-					value: 10,
-					labels: map[string]string{
-						"net_host_name":       "",
-						"net_host_port":       "",
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				"target_info": {
-					value: 0,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-			},
-		},
-		{
-			name:            "DisableHighCardinalityWithOtel",
-			useOtel:         true,
-			disableHighCard: true,
-			expectedMetrics: map[string]metricValue{
-				metricPrefix + ocPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + otelPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + grpcPrefix + counterName: {
-					value: 11,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + httpPrefix + counterName: {
-					value: 10,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				"target_info": {
-					value: 0,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-			},
-		},
-		{
-			name:           "UseOTelWithSDKConfiguration",
-			extendedConfig: true,
-			cfg: &telemetry.Config{
-				Metrics: telemetry.MetricsConfig{
-					Level: configtelemetry.LevelDetailed,
-				},
-				Traces: telemetry.TracesConfig{
-					Processors: []config.SpanProcessor{
-						{
-							Batch: &config.BatchSpanProcessor{
-								Exporter: config.SpanExporter{
-									Console: config.Console{},
-								},
-							},
-						},
-					},
-				},
-				Resource: map[string]*string{
-					semconv.AttributeServiceInstanceID: &testInstanceID,
-				},
-			},
-			expectedMetrics: map[string]metricValue{
-				metricPrefix + ocPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + otelPrefix + counterName: {
-					value: 13,
-					labels: map[string]string{
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + grpcPrefix + counterName: {
-					value: 11,
-					labels: map[string]string{
-						"net_sock_peer_addr":  "",
-						"net_sock_peer_name":  "",
-						"net_sock_peer_port":  "",
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				metricPrefix + httpPrefix + counterName: {
-					value: 10,
-					labels: map[string]string{
-						"net_host_name":       "",
-						"net_host_port":       "",
-						"service_name":        "otelcol",
-						"service_version":     "latest",
-						"service_instance_id": testInstanceID,
-					},
-				},
-				"target_info": {
+				metricPrefix + "target_info": {
 					value: 0,
 					labels: map[string]string{
 						"service_name":        "otelcol",
@@ -292,37 +137,19 @@ func TestTelemetryInit(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tel := newColTelemetry(tc.useOtel, tc.disableHighCard, tc.extendedConfig)
+			tel := newColTelemetry(tc.useOtel)
 			buildInfo := component.NewDefaultBuildInfo()
-			if tc.extendedConfig {
-				tc.cfg.Metrics.Readers = []config.MetricReader{
-					{
-						Pull: &config.PullMetricReader{
-							Exporter: config.MetricExporter{
-								Prometheus: testutil.GetAvailableLocalAddressPrometheus(t),
-							},
-						},
-					},
-				}
+			cfg := telemetry.Config{
+				Resource: map[string]*string{
+					semconv.AttributeServiceInstanceID: &testInstanceID,
+				},
+				Metrics: telemetry.MetricsConfig{
+					Level:   configtelemetry.LevelDetailed,
+					Address: testutil.GetAvailableLocalAddress(t),
+				},
 			}
-			if tc.cfg == nil {
-				tc.cfg = &telemetry.Config{
-					Resource: map[string]*string{
-						semconv.AttributeServiceInstanceID: &testInstanceID,
-					},
-					Metrics: telemetry.MetricsConfig{
-						Level:   configtelemetry.LevelDetailed,
-						Address: testutil.GetAvailableLocalAddress(t),
-					},
-				}
-			}
-			otelRes := buildResource(buildInfo, *tc.cfg)
-			res := pdataFromSdk(otelRes)
-			settings := servicetelemetry.TelemetrySettings{
-				Logger:   zap.NewNop(),
-				Resource: res,
-			}
-			err := tel.init(otelRes, settings, *tc.cfg, make(chan error))
+
+			err := tel.init(buildInfo, zap.NewNop(), cfg, make(chan error))
 			require.NoError(t, err)
 			defer func() {
 				require.NoError(t, tel.shutdown())
@@ -356,17 +183,9 @@ func TestTelemetryInit(t *testing.T) {
 
 func createTestMetrics(t *testing.T, mp metric.MeterProvider) *view.View {
 	// Creates a OTel Go counter
-	counter, err := mp.Meter("collector_test").Int64Counter(otelPrefix+counterName, metric.WithUnit("ms"))
+	counter, err := mp.Meter("collector_test").Int64Counter(otelPrefix+counterName, instrument.WithUnit("ms"))
 	require.NoError(t, err)
 	counter.Add(context.Background(), 13)
-
-	grpcExampleCounter, err := mp.Meter(proctelemetry.GRPCInstrumentation).Int64Counter(grpcPrefix + counterName)
-	require.NoError(t, err)
-	grpcExampleCounter.Add(context.Background(), 11, metric.WithAttributes(proctelemetry.GRPCUnacceptableKeyValues...))
-
-	httpExampleCounter, err := mp.Meter(proctelemetry.HTTPInstrumentation).Int64Counter(httpPrefix + counterName)
-	require.NoError(t, err)
-	httpExampleCounter.Add(context.Background(), 10, metric.WithAttributes(proctelemetry.HTTPUnacceptableKeyValues...))
 
 	// Creates a OpenCensus measure
 	ocCounter := stats.Int64(ocPrefix+counterName, counterName, stats.UnitDimensionless)

@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package builder // import "go.opentelemetry.io/collector/cmd/builder/internal/builder"
 
@@ -11,12 +22,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hashicorp/go-version"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
-const defaultOtelColVersion = "0.90.1"
+const defaultOtelColVersion = "0.76.1"
 
 // ErrInvalidGoMod indicates an invalid gomod
 var ErrInvalidGoMod = errors.New("invalid gomod specification for module")
@@ -24,11 +34,9 @@ var ErrInvalidGoMod = errors.New("invalid gomod specification for module")
 // Config holds the builder's configuration
 type Config struct {
 	Logger          *zap.Logger
-	SkipGenerate    bool   `mapstructure:"-"`
 	SkipCompilation bool   `mapstructure:"-"`
 	SkipGetModules  bool   `mapstructure:"-"`
 	LDFlags         string `mapstructure:"-"`
-	Verbose         bool   `mapstructure:"-"`
 
 	Distribution Distribution `mapstructure:"dist"`
 	Exporters    []Module     `mapstructure:"exporters"`
@@ -42,16 +50,15 @@ type Config struct {
 
 // Distribution holds the parameters for the final binary
 type Distribution struct {
-	Module               string `mapstructure:"module"`
-	Name                 string `mapstructure:"name"`
-	Go                   string `mapstructure:"go"`
-	Description          string `mapstructure:"description"`
-	OtelColVersion       string `mapstructure:"otelcol_version"`
-	RequireOtelColModule bool   `mapstructure:"-"` // required for backwards-compatibility with builds older than 0.86.0
-	OutputPath           string `mapstructure:"output_path"`
-	Version              string `mapstructure:"version"`
-	BuildTags            string `mapstructure:"build_tags"`
-	DebugCompilation     bool   `mapstructure:"debug_compilation"`
+	Module           string `mapstructure:"module"`
+	Name             string `mapstructure:"name"`
+	Go               string `mapstructure:"go"`
+	Description      string `mapstructure:"description"`
+	OtelColVersion   string `mapstructure:"otelcol_version"`
+	OutputPath       string `mapstructure:"output_path"`
+	Version          string `mapstructure:"version"`
+	BuildTags        string `mapstructure:"build_tags"`
+	DebugCompilation bool   `mapstructure:"debug_compilation"`
 }
 
 // Module represents a receiver, exporter, processor or extension for the distribution
@@ -99,7 +106,7 @@ func (c *Config) Validate() error {
 func (c *Config) SetGoPath() error {
 	if !c.SkipCompilation || !c.SkipGetModules {
 		// #nosec G204
-		if _, err := exec.Command(c.Distribution.Go, "env").CombinedOutput(); err != nil { // nolint G204
+		if _, err := exec.Command(c.Distribution.Go, "env").CombinedOutput(); err != nil {
 			path, err := exec.LookPath("go")
 			if err != nil {
 				return ErrGoNotFound
@@ -108,21 +115,6 @@ func (c *Config) SetGoPath() error {
 		}
 		c.Logger.Info("Using go", zap.String("go-executable", c.Distribution.Go))
 	}
-	return nil
-}
-
-func (c *Config) SetRequireOtelColModule() error {
-	constraint, err := version.NewConstraint(">= 0.86.0")
-	if err != nil {
-		return err
-	}
-
-	otelColVersion, err := version.NewVersion(c.Distribution.OtelColVersion)
-	if err != nil {
-		return err
-	}
-
-	c.Distribution.RequireOtelColModule = constraint.Check(otelColVersion)
 	return nil
 }
 

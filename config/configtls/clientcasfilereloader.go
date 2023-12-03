@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package configtls // import "go.opentelemetry.io/collector/config/configtls"
 
@@ -112,7 +123,7 @@ func (r *clientCAsFileReloader) handleWatcherEvents() {
 			// NOTE: k8s configmaps uses symlinks, we need this workaround.
 			// original configmap file is removed.
 			// SEE: https://martensson.io/go-fsnotify-and-kubernetes-configmaps/
-			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Chmod) {
+			if event.Op == fsnotify.Remove || event.Op == fsnotify.Chmod {
 				// remove the watcher since the file is removed
 				if err := r.watcher.Remove(event.Name); err != nil {
 					r.lastReloadError = err
@@ -123,7 +134,7 @@ func (r *clientCAsFileReloader) handleWatcherEvents() {
 				}
 				r.reload()
 			}
-			if event.Has(fsnotify.Write) {
+			if event.Op == fsnotify.Write {
 				r.reload()
 			}
 		}

@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package confmap
 
@@ -409,89 +420,4 @@ func TestUnmarshalerErr(t *testing.T) {
 	tc := &testErrConfig{}
 	assert.EqualError(t, cfgMap.Unmarshal(tc), expectErr)
 	assert.Empty(t, tc.Err.Foo)
-}
-
-func TestZeroSliceHookFunc(t *testing.T) {
-	type structWithSlices struct {
-		Strings []string `mapstructure:"strings"`
-	}
-
-	tests := []struct {
-		name     string
-		cfg      map[string]any
-		provided any
-		expected any
-	}{
-		{
-			name: "overridden by slice",
-			cfg: map[string]any{
-				"strings": []string{"111"},
-			},
-			provided: &structWithSlices{
-				Strings: []string{"xxx", "yyyy", "zzzz"},
-			},
-			expected: &structWithSlices{
-				Strings: []string{"111"},
-			},
-		},
-		{
-			name: "overridden by a bigger slice",
-			cfg: map[string]any{
-				"strings": []string{"111", "222", "333"},
-			},
-			provided: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-			expected: &structWithSlices{
-				Strings: []string{"111", "222", "333"},
-			},
-		},
-		{
-			name: "overridden by an empty slice",
-			cfg: map[string]any{
-				"strings": []string{},
-			},
-			provided: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-			expected: &structWithSlices{
-				Strings: []string{},
-			},
-		},
-		{
-			name: "not overridden by nil",
-			cfg: map[string]any{
-				"strings": nil,
-			},
-			provided: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-			expected: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-		},
-		{
-			name: "not overridden by missing value",
-			cfg:  map[string]any{},
-			provided: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-			expected: &structWithSlices{
-				Strings: []string{"xxx", "yyyy"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := NewFromStringMap(tt.cfg)
-
-			err := cfg.Unmarshal(tt.provided)
-			if assert.NoError(t, err) {
-				assert.Equal(t, tt.expected, tt.provided)
-			}
-		})
-	}
 }

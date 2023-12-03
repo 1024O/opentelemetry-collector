@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package proctelemetry
 
@@ -21,7 +32,7 @@ import (
 	"go.opencensus.io/metric/metricdata"
 	"go.opencensus.io/stats/view"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/noop"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 
@@ -52,6 +63,7 @@ var expectedMetrics = []string{
 }
 
 var otelExpectedMetrics = []string{
+	// OTel Go adds `_total` suffix
 	"process_uptime",
 	"process_runtime_heap_alloc_bytes",
 	"process_runtime_total_alloc_bytes",
@@ -72,7 +84,7 @@ func setupTelemetry(t *testing.T) testTelemetry {
 	require.NoError(t, err)
 
 	promReg := prometheus.NewRegistry()
-	exporter, err := otelprom.New(otelprom.WithRegisterer(promReg), otelprom.WithoutUnits(), otelprom.WithoutCounterSuffixes())
+	exporter, err := otelprom.New(otelprom.WithRegisterer(promReg), otelprom.WithoutUnits())
 	require.NoError(t, err)
 
 	settings.meterProvider = sdkmetric.NewMeterProvider(
@@ -111,6 +123,10 @@ func TestOtelProcessTelemetry(t *testing.T) {
 
 	for _, metricName := range tel.expectedMetrics {
 		metric, ok := mp[metricName]
+		if !ok {
+			withSuffix := metricName + "_total"
+			metric, ok = mp[withSuffix]
+		}
 		require.True(t, ok)
 		require.True(t, len(metric.Metric) == 1)
 		var metricValue float64
@@ -132,7 +148,7 @@ func TestOtelProcessTelemetry(t *testing.T) {
 func TestOCProcessTelemetry(t *testing.T) {
 	ocRegistry := metric.NewRegistry()
 
-	require.NoError(t, RegisterProcessMetrics(ocRegistry, noop.NewMeterProvider(), false, 0))
+	require.NoError(t, RegisterProcessMetrics(ocRegistry, otelmetric.NewNoopMeterProvider(), false, 0))
 
 	// Check that the metrics are actually filled.
 	<-time.After(200 * time.Millisecond)
@@ -170,7 +186,7 @@ func TestProcessTelemetryFailToRegister(t *testing.T) {
 			ocRegistry := metric.NewRegistry()
 			_, err := ocRegistry.AddFloat64Gauge(metricName)
 			require.NoError(t, err)
-			assert.Error(t, RegisterProcessMetrics(ocRegistry, noop.NewMeterProvider(), false, 0))
+			assert.Error(t, RegisterProcessMetrics(ocRegistry, otelmetric.NewNoopMeterProvider(), false, 0))
 		})
 	}
 }

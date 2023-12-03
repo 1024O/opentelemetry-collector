@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package pmetric // import "go.opentelemetry.io/collector/pdata/pmetric"
 
@@ -13,26 +24,16 @@ import (
 type Metrics internal.Metrics
 
 func newMetrics(orig *otlpcollectormetrics.ExportMetricsServiceRequest) Metrics {
-	state := internal.StateMutable
-	return Metrics(internal.NewMetrics(orig, &state))
+	return Metrics(internal.NewMetrics(orig))
 }
 
 func (ms Metrics) getOrig() *otlpcollectormetrics.ExportMetricsServiceRequest {
 	return internal.GetOrigMetrics(internal.Metrics(ms))
 }
 
-func (ms Metrics) getState() *internal.State {
-	return internal.GetMetricsState(internal.Metrics(ms))
-}
-
 // NewMetrics creates a new Metrics struct.
 func NewMetrics() Metrics {
 	return newMetrics(&otlpcollectormetrics.ExportMetricsServiceRequest{})
-}
-
-// IsReadOnly returns true if this Metrics instance is read-only.
-func (ms Metrics) IsReadOnly() bool {
-	return *ms.getState() == internal.StateReadOnly
 }
 
 // CopyTo copies the Metrics instance overriding the destination.
@@ -42,7 +43,7 @@ func (ms Metrics) CopyTo(dest Metrics) {
 
 // ResourceMetrics returns the ResourceMetricsSlice associated with this Metrics.
 func (ms Metrics) ResourceMetrics() ResourceMetricsSlice {
-	return newResourceMetricsSlice(&ms.getOrig().ResourceMetrics, internal.GetMetricsState(internal.Metrics(ms)))
+	return newResourceMetricsSlice(&ms.getOrig().ResourceMetrics)
 }
 
 // MetricCount calculates the total number of metrics.
@@ -87,9 +88,4 @@ func (ms Metrics) DataPointCount() (dataPointCount int) {
 		}
 	}
 	return
-}
-
-// MarkReadOnly marks the Metrics as shared so that no further modifications can be done on it.
-func (ms Metrics) MarkReadOnly() {
-	internal.SetMetricsState(internal.Metrics(ms), internal.StateReadOnly)
 }

@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package pcommon
 
@@ -15,12 +26,11 @@ import (
 func TestSlice(t *testing.T) {
 	es := NewSlice()
 	assert.Equal(t, 0, es.Len())
-	state := internal.StateMutable
-	es = newSlice(&[]otlpcommon.AnyValue{}, &state)
+	es = newSlice(&[]otlpcommon.AnyValue{})
 	assert.Equal(t, 0, es.Len())
 
 	es.EnsureCapacity(7)
-	emptyVal := newValue(&otlpcommon.AnyValue{}, &state)
+	emptyVal := newValue(&otlpcommon.AnyValue{})
 	testVal := Value(internal.GenerateTestValue())
 	assert.Equal(t, 7, cap(*es.getOrig()))
 	for i := 0; i < es.Len(); i++ {
@@ -29,29 +39,6 @@ func TestSlice(t *testing.T) {
 		internal.FillTestValue(internal.Value(el))
 		assert.Equal(t, testVal, el)
 	}
-}
-
-func TestSliceReadOnly(t *testing.T) {
-	state := internal.StateReadOnly
-	es := newSlice(&[]otlpcommon.AnyValue{{Value: &otlpcommon.AnyValue_IntValue{IntValue: 3}}}, &state)
-
-	assert.Equal(t, 1, es.Len())
-	assert.Equal(t, int64(3), es.At(0).Int())
-	assert.Panics(t, func() { es.AppendEmpty() })
-	assert.Panics(t, func() { es.EnsureCapacity(2) })
-
-	es2 := NewSlice()
-	es.CopyTo(es2)
-	assert.Equal(t, es.AsRaw(), es2.AsRaw())
-	assert.Panics(t, func() { es2.CopyTo(es) })
-
-	assert.Panics(t, func() { es.MoveAndAppendTo(es2) })
-	assert.Panics(t, func() { es2.MoveAndAppendTo(es) })
-
-	assert.Panics(t, func() { es.RemoveIf(func(el Value) bool { return false }) })
-
-	assert.Equal(t, []any{int64(3)}, es.AsRaw())
-	assert.Panics(t, func() { _ = es.FromRaw([]any{3}) })
 }
 
 func TestSlice_CopyTo(t *testing.T) {

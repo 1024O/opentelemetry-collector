@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package otlpreceiver
 
@@ -115,23 +126,18 @@ func TestUnmarshalConfig(t *testing.T) {
 						},
 					},
 				},
-				HTTP: &HTTPConfig{
-					HTTPServerSettings: &confighttp.HTTPServerSettings{
-						Endpoint: "0.0.0.0:4318",
-						TLSSetting: &configtls.TLSServerSetting{
-							TLSSetting: configtls.TLSSetting{
-								CertFile: "test.crt",
-								KeyFile:  "test.key",
-							},
-						},
-						CORS: &confighttp.CORSSettings{
-							AllowedOrigins: []string{"https://*.test.com", "https://test.com"},
-							MaxAge:         7200,
+				HTTP: &confighttp.HTTPServerSettings{
+					Endpoint: "0.0.0.0:4318",
+					TLSSetting: &configtls.TLSServerSetting{
+						TLSSetting: configtls.TLSSetting{
+							CertFile: "test.crt",
+							KeyFile:  "test.key",
 						},
 					},
-					TracesURLPath:  "/traces",
-					MetricsURLPath: "/v2/metrics",
-					LogsURLPath:    "/log/ingest",
+					CORS: &confighttp.CORSSettings{
+						AllowedOrigins: []string{"https://*.test.com", "https://test.com"},
+						MaxAge:         7200,
+					},
 				},
 			},
 		}, cfg)
@@ -154,13 +160,9 @@ func TestUnmarshalConfigUnix(t *testing.T) {
 					},
 					ReadBufferSize: 512 * 1024,
 				},
-				HTTP: &HTTPConfig{
-					HTTPServerSettings: &confighttp.HTTPServerSettings{
-						Endpoint: "/tmp/http_otlp.sock",
-					},
-					TracesURLPath:  defaultTracesURLPath,
-					MetricsURLPath: defaultMetricsURLPath,
-					LogsURLPath:    defaultLogsURLPath,
+				HTTP: &confighttp.HTTPServerSettings{
+					Endpoint: "/tmp/http_otlp.sock",
+					// Transport: "unix",
 				},
 			},
 		}, cfg)
@@ -189,36 +191,6 @@ func TestUnmarshalConfigEmptyProtocols(t *testing.T) {
 	cfg := factory.CreateDefaultConfig()
 	assert.NoError(t, component.UnmarshalConfig(cm, cfg))
 	assert.EqualError(t, component.ValidateConfig(cfg), "must specify at least one protocol when using the OTLP receiver")
-}
-
-func TestUnmarshalConfigInvalidSignalPath(t *testing.T) {
-	tests := []struct {
-		name       string
-		testDataFn string
-	}{
-		{
-			name:       "Invalid traces URL path",
-			testDataFn: "invalid_traces_path.yaml",
-		},
-		{
-			name:       "Invalid metrics URL path",
-			testDataFn: "invalid_metrics_path.yaml",
-		},
-		{
-			name:       "Invalid logs URL path",
-			testDataFn: "invalid_logs_path.yaml",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			cm, err := confmaptest.LoadConf(filepath.Join("testdata", test.testDataFn))
-			require.NoError(t, err)
-			factory := NewFactory()
-			cfg := factory.CreateDefaultConfig()
-			assert.EqualError(t, component.UnmarshalConfig(cm, cfg), "invalid HTTP URL path set for signal: parse \":invalid\": missing protocol scheme")
-		})
-	}
 }
 
 func TestUnmarshalConfigEmpty(t *testing.T) {

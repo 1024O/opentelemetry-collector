@@ -1,10 +1,20 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package featuregate
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,113 +32,97 @@ func TestNewFlag(t *testing.T) {
 		{
 			name:        "empty item",
 			input:       "",
-			expected:    map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "-alpha,beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": false, "beta": true, "stable": true},
+			expectedStr: "-alpha,beta,stable",
 		},
 		{
 			name:        "simple enable alpha",
 			input:       "alpha",
-			expected:    map[string]bool{"alpha": true, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "alpha,beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": true, "beta": true, "stable": true},
+			expectedStr: "alpha,beta,stable",
 		},
 		{
 			name:        "plus enable alpha",
 			input:       "+alpha",
-			expected:    map[string]bool{"alpha": true, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "alpha,beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": true, "beta": true, "stable": true},
+			expectedStr: "alpha,beta,stable",
 		},
 		{
 			name:        "disabled beta",
 			input:       "-beta",
-			expected:    map[string]bool{"alpha": false, "beta": false, "deprecated": false, "stable": true},
-			expectedStr: "-alpha,-beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": false, "beta": false, "stable": true},
+			expectedStr: "-alpha,-beta,stable",
 		},
 		{
 			name:        "multiple items",
 			input:       "-beta,alpha",
-			expected:    map[string]bool{"alpha": true, "beta": false, "deprecated": false, "stable": true},
-			expectedStr: "alpha,-beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": true, "beta": false, "stable": true},
+			expectedStr: "alpha,-beta,stable",
 		},
 		{
 			name:        "multiple items with plus",
 			input:       "-beta,+alpha",
-			expected:    map[string]bool{"alpha": true, "beta": false, "deprecated": false, "stable": true},
-			expectedStr: "alpha,-beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": true, "beta": false, "stable": true},
+			expectedStr: "alpha,-beta,stable",
 		},
 		{
 			name:        "repeated items",
 			input:       "alpha,-beta,-alpha",
-			expected:    map[string]bool{"alpha": false, "beta": false, "deprecated": false, "stable": true},
-			expectedStr: "-alpha,-beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": false, "beta": false, "stable": true},
+			expectedStr: "-alpha,-beta,stable",
 		},
 		{
 			name:        "multiple plus items",
 			input:       "+alpha,+beta",
-			expected:    map[string]bool{"alpha": true, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "alpha,beta,-deprecated,stable",
+			expected:    map[string]bool{"alpha": true, "beta": true, "stable": true},
+			expectedStr: "alpha,beta,stable",
 		},
 		{
-			name:        "enable stable",
-			input:       "stable",
-			expected:    map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "-alpha,beta,-deprecated,stable",
+			name:           "enable stable",
+			input:          "stable",
+			expectedSetErr: true,
+			expected:       map[string]bool{"alpha": false, "beta": true, "stable": true},
+			expectedStr:    "-alpha,beta,stable",
 		},
 		{
 			name:           "disable stable",
-			input:          "-stable",
+			input:          "stable",
 			expectedSetErr: true,
-			expected:       map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr:    "-alpha,beta,-deprecated,stable",
-		},
-		{
-			name:           "enable deprecated",
-			input:          "deprecated",
-			expectedSetErr: true,
-			expected:       map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr:    "-alpha,beta,-deprecated,stable",
-		},
-		{
-			name:        "disable deprecated",
-			input:       "-deprecated",
-			expected:    map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr: "-alpha,beta,-deprecated,stable",
+			expected:       map[string]bool{"alpha": false, "beta": true, "stable": true},
+			expectedStr:    "-alpha,beta,stable",
 		},
 		{
 			name:           "enable missing",
 			input:          "missing",
 			expectedSetErr: true,
-			expected:       map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr:    "-alpha,beta,-deprecated,stable",
+			expected:       map[string]bool{"alpha": false, "beta": true, "stable": true},
+			expectedStr:    "-alpha,beta,stable",
 		},
 		{
 			name:           "disable missing",
 			input:          "missing",
 			expectedSetErr: true,
-			expected:       map[string]bool{"alpha": false, "beta": true, "deprecated": false, "stable": true},
-			expectedStr:    "-alpha,beta,-deprecated,stable",
+			expected:       map[string]bool{"alpha": false, "beta": true, "stable": true},
+			expectedStr:    "-alpha,beta,stable",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			reg := NewRegistry()
 			reg.MustRegister("alpha", StageAlpha)
 			reg.MustRegister("beta", StageBeta)
-			reg.MustRegister("deprecated", StageDeprecated, WithRegisterToVersion("1.0.0"))
 			reg.MustRegister("stable", StageStable, WithRegisterToVersion("1.0.0"))
-			fs := flag.NewFlagSet("test", flag.ContinueOnError)
-			reg.RegisterFlags(fs)
-			registrationFlag := fs.Lookup(featureGatesFlag)
-			require.NotNil(t, registrationFlag)
+			v := NewFlag(reg)
 			if tt.expectedSetErr {
-				require.Error(t, registrationFlag.Value.Set(tt.input))
+				require.Error(t, v.Set(tt.input))
 			} else {
-				require.NoError(t, registrationFlag.Value.Set(tt.input))
+				require.NoError(t, v.Set(tt.input))
 			}
 			got := map[string]bool{}
 			reg.VisitAll(func(g *Gate) {
 				got[g.ID()] = g.IsEnabled()
 			})
 			assert.Equal(t, tt.expected, got)
-			assert.Equal(t, tt.expectedStr, registrationFlag.Value.String())
+			assert.Equal(t, tt.expectedStr, v.String())
 		})
 	}
 }

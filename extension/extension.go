@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package extension // import "go.opentelemetry.io/collector/extension"
 
@@ -8,21 +19,12 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/confmap"
 )
 
 // Extension is the interface for objects hosted by the OpenTelemetry Collector that
 // don't participate directly on data pipelines but provide some functionality
 // to the service, examples: health check endpoint, z-pages, etc.
 type Extension = component.Component
-
-// Dependent is an optional interface that can be implemented by extensions
-// that depend on other extensions and must be started only after their dependencies.
-// See https://github.com/open-telemetry/opentelemetry-collector/pull/8768 for examples.
-type Dependent interface {
-	Extension
-	Dependencies() []component.ID
-}
 
 // PipelineWatcher is an extra interface for Extension hosted by the OpenTelemetry
 // Collector that is to be implemented by extensions interested in changes to pipeline
@@ -39,27 +41,6 @@ type PipelineWatcher interface {
 	// This is sent before receivers are stopped, so the Extension can take any
 	// appropriate actions before that happens.
 	NotReady() error
-}
-
-// ConfigWatcher is an interface that should be implemented by an extension that
-// wishes to be notified of the Collector's effective configuration.
-type ConfigWatcher interface {
-	// NotifyConfig notifies the extension of the Collector's current effective configuration.
-	// The extension owns the `confmap.Conf`. Callers must ensure that it's safe for
-	// extensions to store the `conf` pointer and use it concurrently with any other
-	// instances of `conf`.
-	NotifyConfig(ctx context.Context, conf *confmap.Conf) error
-}
-
-// StatusWatcher is an extra interface for Extension hosted by the OpenTelemetry
-// Collector that is to be implemented by extensions interested in changes to component
-// status.
-type StatusWatcher interface {
-	// ComponentStatusChanged notifies about a change in the source component status.
-	// Extensions that implement this interface must be ready that the ComponentStatusChanged
-	// may be called before, after or concurrently with calls to Component.Start() and Component.Shutdown().
-	// The function may be called concurrently with itself.
-	ComponentStatusChanged(source *component.InstanceID, event *component.StatusEvent)
 }
 
 // CreateSettings is passed to Factory.Create(...) function.

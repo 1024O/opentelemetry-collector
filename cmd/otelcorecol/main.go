@@ -11,13 +11,18 @@ import (
 )
 
 func main() {
+	factories, err := components()
+	if err != nil {
+		log.Fatalf("failed to build components: %v", err)
+	}
+
 	info := component.BuildInfo{
 		Command:     "otelcorecol",
 		Description: "Local OpenTelemetry Collector binary, testing only.",
-		Version:     "0.90.1-dev",
+		Version:     "0.76.1-dev",
 	}
 
-	if err := run(otelcol.CollectorSettings{BuildInfo: info, Factories: components}); err != nil {
+	if err := run(otelcol.CollectorSettings{BuildInfo: info, Factories: factories}); err != nil {
 		log.Fatal(err)
 	}
 }

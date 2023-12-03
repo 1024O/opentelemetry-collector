@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package internal // import "go.opentelemetry.io/collector/pdata/internal/cmd/pdatagen/internal"
 
@@ -21,15 +32,14 @@ type {{ .structName }} internal.{{ .structName }}
 {{- else }}
 type {{ .structName }} struct {
 	orig *{{ .originName }}
-	state *internal.State
 }
 {{- end }}
 
-func new{{ .structName }}(orig *{{ .originName }}, state *internal.State) {{ .structName }} {
+func new{{ .structName }}(orig *{{ .originName }}) {{ .structName }} {
 	{{- if .isCommon }}
-	return {{ .structName }}(internal.New{{ .structName }}(orig, state))
+	return {{ .structName }}(internal.New{{ .structName }}(orig))
 	{{- else }}
-	return {{ .structName }}{orig: orig, state: state}
+	return {{ .structName }}{orig}
 	{{- end }}
 }
 
@@ -38,15 +48,12 @@ func new{{ .structName }}(orig *{{ .originName }}, state *internal.State) {{ .st
 // This must be used only in testing code. Users should use "AppendEmpty" when part of a Slice,
 // OR directly access the member if this is embedded in another struct.
 func New{{ .structName }}() {{ .structName }} {
-	state := internal.StateMutable
-	return new{{ .structName }}(&{{ .originName }}{}, &state)
+	return new{{ .structName }}(&{{ .originName }}{})
 }
 
 // MoveTo moves all properties from the current struct overriding the destination and
 // resetting the current instance to its zero value
 func (ms {{ .structName }}) MoveTo(dest {{ .structName }}) {
-	ms.{{- if .isCommon }}getState(){{ else }}state{{ end }}.AssertMutable()
-	dest.{{- if .isCommon }}getState(){{ else }}state{{ end }}.AssertMutable()
 	*dest.{{ .origAccessor }} = *ms.{{ .origAccessor }}
 	*ms.{{ .origAccessor }} = {{ .originName }}{}
 }
@@ -54,10 +61,6 @@ func (ms {{ .structName }}) MoveTo(dest {{ .structName }}) {
 {{ if .isCommon -}}
 func (ms {{ .structName }}) getOrig() *{{ .originName }} {
 	return internal.GetOrig{{ .structName }}(internal.{{ .structName }}(ms))
-}
-
-func (ms {{ .structName }}) getState() *internal.State {
-	return internal.Get{{ .structName }}State(internal.{{ .structName }}(ms))
 }
 {{- end }}
 
@@ -67,10 +70,9 @@ func (ms {{ .structName }}) getState() *internal.State {
 
 // CopyTo copies all properties from the current struct overriding the destination.
 func (ms {{ .structName }}) CopyTo(dest {{ .structName }}) {
-	dest.{{- if .isCommon }}getState(){{ else }}state{{ end }}.AssertMutable()
-	{{- range .fields }}
-	{{ .GenerateCopyToValue $.messageStruct }}
-	{{- end }}
+{{- range .fields }}
+{{ .GenerateCopyToValue $.messageStruct }}
+{{- end }}
 }`
 
 const messageValueTestTemplate = `
@@ -80,9 +82,6 @@ func Test{{ .structName }}_MoveTo(t *testing.T) {
 	ms.MoveTo(dest)
 	assert.Equal(t, New{{ .structName }}(), ms)
 	assert.Equal(t, {{ .generateTestData }}, dest)
-	sharedState := internal.StateReadOnly
-	assert.Panics(t, func() { ms.MoveTo(new{{ .structName }}(&{{ .originName }}{}, &sharedState)) })
-	assert.Panics(t, func() { new{{ .structName }}(&{{ .originName }}{}, &sharedState).MoveTo(dest) })
 }
 
 func Test{{ .structName }}_CopyTo(t *testing.T) {
@@ -93,8 +92,6 @@ func Test{{ .structName }}_CopyTo(t *testing.T) {
 	orig = {{ .generateTestData }}
 	orig.CopyTo(ms)
 	assert.Equal(t, orig, ms)
-	sharedState := internal.StateReadOnly
-	assert.Panics(t, func() { ms.CopyTo(new{{ .structName }}(&{{ .originName }}{}, &sharedState)) })
 }
 
 {{ range .fields }}
@@ -104,9 +101,8 @@ func Test{{ .structName }}_CopyTo(t *testing.T) {
 const messageValueGenerateTestTemplate = `func {{ upperIfInternal "g" }}enerateTest{{ .structName }}() {{ .structName }} {
 	{{- if .isCommon }}
 	orig := {{ .originName }}{}
-	state := StateMutable
 	{{- end }}
-	tv := New{{ .structName }}({{ if .isCommon }}&orig, &state{{ end }})
+	tv := New{{ .structName }}({{ if .isCommon }}&orig{{ end }})
 	{{ upperIfInternal "f" }}illTest{{ .structName }}(tv)
 	return tv
 }
@@ -120,23 +116,19 @@ func {{ upperIfInternal "f" }}illTest{{ .structName }}(tv {{ .structName }}) {
 const messageValueAliasTemplate = `
 type {{ .structName }} struct {
 	orig *{{ .originName }}
-	state *State
 }
 
 func GetOrig{{ .structName }}(ms {{ .structName }}) *{{ .originName }} {
 	return ms.orig
 }
 
-func Get{{ .structName }}State(ms {{ .structName }}) *State {
-	return ms.state
-}
-
-func New{{ .structName }}(orig *{{ .originName }}, state *State) {{ .structName }} {
-	return {{ .structName }}{orig: orig, state: state}
+func New{{ .structName }}(orig *{{ .originName }}) {{ .structName }} {
+	return {{ .structName }}{orig: orig}
 }`
 
 type baseStruct interface {
 	getName() string
+	getPackageName() string
 	generateStruct(sb *bytes.Buffer)
 	generateTests(sb *bytes.Buffer)
 	generateTestValueHelpers(sb *bytes.Buffer)
@@ -155,6 +147,10 @@ type messageValueStruct struct {
 
 func (ms *messageValueStruct) getName() string {
 	return ms.structName
+}
+
+func (ms *messageValueStruct) getPackageName() string {
+	return ms.packageName
 }
 
 func (ms *messageValueStruct) generateStruct(sb *bytes.Buffer) {

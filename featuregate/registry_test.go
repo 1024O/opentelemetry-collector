@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package featuregate
 
@@ -43,20 +54,9 @@ func TestRegistryApplyError(t *testing.T) {
 	r := NewRegistry()
 	assert.Error(t, r.Set("foo", true))
 	r.MustRegister("bar", StageAlpha)
-
 	assert.Error(t, r.Set("foo", true))
-	_, err := r.Register("foo", StageStable)
-	assert.Error(t, err)
+	r.MustRegister("foo", StageStable, WithRegisterToVersion("next"))
 	assert.Error(t, r.Set("foo", true))
-	r.MustRegister("foo", StageStable, WithRegisterToVersion("v1.0.0"))
-	assert.Error(t, r.Set("foo", false))
-
-	assert.Error(t, r.Set("deprecated", true))
-	_, err = r.Register("deprecated", StageDeprecated)
-	assert.Error(t, err)
-	assert.Error(t, r.Set("deprecated", true))
-	r.MustRegister("deprecated", StageDeprecated, WithRegisterToVersion("v1.0.0"))
-	assert.Error(t, r.Set("deprecated", true))
 }
 
 func TestRegistryApply(t *testing.T) {
@@ -78,121 +78,62 @@ func TestRegisterGateLifecycle(t *testing.T) {
 	}{
 		{
 			name:      "StageAlpha Flag",
-			id:        "test.gate",
+			id:        "test-gate",
 			stage:     StageAlpha,
 			enabled:   false,
 			shouldErr: false,
 		},
 		{
 			name:  "StageAlpha Flag with all options",
-			id:    "test.gate",
+			id:    "test-gate",
 			stage: StageAlpha,
 			opts: []RegisterOption{
-				WithRegisterDescription("test.gate"),
+				WithRegisterDescription("test-gate"),
 				WithRegisterReferenceURL("http://example.com/issue/1"),
-				WithRegisterToVersion("v0.88.0"),
+				WithRegisterToVersion(""),
 			},
 			enabled:   false,
 			shouldErr: false,
 		},
 		{
 			name:      "StageBeta Flag",
-			id:        "test.gate",
+			id:        "test-gate",
 			stage:     StageBeta,
 			enabled:   true,
 			shouldErr: false,
 		},
 		{
 			name:  "StageStable Flag",
-			id:    "test.gate",
+			id:    "test-gate",
 			stage: StageStable,
 			opts: []RegisterOption{
-				WithRegisterToVersion("v1.0.0-rcv.0014"),
+				WithRegisterToVersion("next"),
 			},
 			enabled:   true,
 			shouldErr: false,
 		},
 		{
-			name:  "StageDeprecated Flag",
-			id:    "test.gate",
-			stage: StageDeprecated,
-			opts: []RegisterOption{
-				WithRegisterToVersion("v0.89.0"),
-			},
-			enabled:   false,
-			shouldErr: false,
-		},
-		{
 			name:      "Invalid stage",
-			id:        "test.gate",
+			id:        "test-gate",
 			stage:     Stage(-1),
 			shouldErr: true,
 		},
 		{
 			name:      "StageStable gate missing removal version",
-			id:        "test.gate",
+			id:        "test-gate",
 			stage:     StageStable,
-			shouldErr: true,
-		},
-		{
-			name:      "StageDeprecated gate missing removal version",
-			id:        "test.gate",
-			stage:     StageDeprecated,
 			shouldErr: true,
 		},
 		{
 			name:      "Duplicate gate",
-			id:        "existing.gate",
+			id:        "existing-gate",
 			stage:     StageStable,
-			shouldErr: true,
-		},
-		{
-			name:      "Invalid gate name",
-			id:        "+invalid.gate.name",
-			stage:     StageAlpha,
-			shouldErr: true,
-		},
-		{
-			name:      "Invalid empty gate",
-			id:        "",
-			stage:     StageAlpha,
-			shouldErr: true,
-		},
-		{
-			name:      "Invalid gate to version",
-			id:        "invalid.gate.to.version",
-			stage:     StageAlpha,
-			opts:      []RegisterOption{WithRegisterToVersion("invalid-version")},
-			shouldErr: true,
-		},
-		{
-			name:      "Invalid gate from version",
-			id:        "invalid.gate.from.version",
-			stage:     StageAlpha,
-			opts:      []RegisterOption{WithRegisterFromVersion("invalid-version")},
-			shouldErr: true,
-		},
-		{
-			name:      "Invalid gate reference URL",
-			id:        "invalid.gate.reference.URL",
-			stage:     StageAlpha,
-			opts:      []RegisterOption{WithRegisterReferenceURL(":invalid-url")},
-			shouldErr: true,
-		},
-		{
-			name:  "Empty version range",
-			id:    "invalid.gate.version.range",
-			stage: StageAlpha,
-			opts: []RegisterOption{
-				WithRegisterFromVersion("v0.88.0"),
-				WithRegisterToVersion("v0.87.0"),
-			},
 			shouldErr: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRegistry()
-			r.MustRegister("existing.gate", StageBeta)
+			r.MustRegister("existing-gate", StageBeta)
 			if tc.shouldErr {
 				_, err := r.Register(tc.id, tc.stage, tc.opts...)
 				assert.Error(t, err)

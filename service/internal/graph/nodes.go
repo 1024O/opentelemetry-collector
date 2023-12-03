@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package graph // import "go.opentelemetry.io/collector/service/internal/graph"
 
@@ -13,11 +24,10 @@ import (
 	"go.opentelemetry.io/collector/connector"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
-	"go.opentelemetry.io/collector/internal/fanoutconsumer"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/service/internal/capabilityconsumer"
 	"go.opentelemetry.io/collector/service/internal/components"
+	"go.opentelemetry.io/collector/service/internal/fanoutconsumer"
 )
 
 const (
@@ -210,7 +220,6 @@ type connectorNode struct {
 	exprPipelineType component.DataType
 	rcvrPipelineType component.DataType
 	component.Component
-	baseConsumer
 }
 
 func newConnectorNode(exprPipelineType, rcvrPipelineType component.DataType, connID component.ID) *connectorNode {
@@ -223,7 +232,7 @@ func newConnectorNode(exprPipelineType, rcvrPipelineType component.DataType, con
 }
 
 func (n *connectorNode) getConsumer() baseConsumer {
-	return n.baseConsumer
+	return n.Component.(baseConsumer)
 }
 
 func (n *connectorNode) buildComponent(
@@ -236,106 +245,61 @@ func (n *connectorNode) buildComponent(
 	set := connector.CreateSettings{ID: n.componentID, TelemetrySettings: tel, BuildInfo: info}
 	set.TelemetrySettings.Logger = components.ConnectorLogger(set.TelemetrySettings.Logger, n.componentID, n.exprPipelineType, n.rcvrPipelineType)
 
+	var err error
 	switch n.rcvrPipelineType {
 	case component.DataTypeTraces:
-		capability := consumer.Capabilities{MutatesData: false}
-		consumers := make(map[component.ID]consumer.Traces, len(nexts))
-		for _, next := range nexts {
-			consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Traces)
-			capability.MutatesData = capability.MutatesData || next.Capabilities().MutatesData
+		next := nexts[0].(consumer.Traces)
+		if len(nexts) > 1 {
+			consumers := make(map[component.ID]consumer.Traces, len(nexts))
+			for _, next := range nexts {
+				consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Traces)
+			}
+			next = fanoutconsumer.NewTracesRouter(consumers)
 		}
-		next := fanoutconsumer.NewTracesRouter(consumers)
-
 		switch n.exprPipelineType {
 		case component.DataTypeTraces:
-			conn, err := builder.CreateTracesToTraces(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component = conn
-			// When connecting pipelines of the same data type, the connector must
-			// inherit the capabilities of pipelines in which it is acting as a receiver.
-			n.baseConsumer = capabilityconsumer.NewTraces(conn, capability)
+			n.Component, err = builder.CreateTracesToTraces(ctx, set, next)
 		case component.DataTypeMetrics:
-			conn, err := builder.CreateMetricsToTraces(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateMetricsToTraces(ctx, set, next)
 		case component.DataTypeLogs:
-			conn, err := builder.CreateLogsToTraces(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateLogsToTraces(ctx, set, next)
 		}
-
 	case component.DataTypeMetrics:
-		capability := consumer.Capabilities{MutatesData: false}
-		consumers := make(map[component.ID]consumer.Metrics, len(nexts))
-		for _, next := range nexts {
-			consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Metrics)
-			capability.MutatesData = capability.MutatesData || next.Capabilities().MutatesData
+		next := nexts[0].(consumer.Metrics)
+		if len(nexts) > 1 {
+			consumers := make(map[component.ID]consumer.Metrics, len(nexts))
+			for _, next := range nexts {
+				consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Metrics)
+			}
+			next = fanoutconsumer.NewMetricsRouter(consumers)
 		}
-		next := fanoutconsumer.NewMetricsRouter(consumers)
-
 		switch n.exprPipelineType {
 		case component.DataTypeTraces:
-			conn, err := builder.CreateTracesToMetrics(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateTracesToMetrics(ctx, set, next)
 		case component.DataTypeMetrics:
-			conn, err := builder.CreateMetricsToMetrics(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component = conn
-			// When connecting pipelines of the same data type, the connector must
-			// inherit the capabilities of pipelines in which it is acting as a receiver.
-			n.baseConsumer = capabilityconsumer.NewMetrics(conn, capability)
+			n.Component, err = builder.CreateMetricsToMetrics(ctx, set, next)
 		case component.DataTypeLogs:
-			conn, err := builder.CreateLogsToMetrics(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateLogsToMetrics(ctx, set, next)
 		}
 	case component.DataTypeLogs:
-		capability := consumer.Capabilities{MutatesData: false}
-		consumers := make(map[component.ID]consumer.Logs, len(nexts))
-		for _, next := range nexts {
-			consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Logs)
-			capability.MutatesData = capability.MutatesData || next.Capabilities().MutatesData
+		next := nexts[0].(consumer.Logs)
+		if len(nexts) > 1 {
+			consumers := make(map[component.ID]consumer.Logs, len(nexts))
+			for _, next := range nexts {
+				consumers[next.(*capabilitiesNode).pipelineID] = next.(consumer.Logs)
+			}
+			next = fanoutconsumer.NewLogsRouter(consumers)
 		}
-		next := fanoutconsumer.NewLogsRouter(consumers)
-
 		switch n.exprPipelineType {
 		case component.DataTypeTraces:
-			conn, err := builder.CreateTracesToLogs(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateTracesToLogs(ctx, set, next)
 		case component.DataTypeMetrics:
-			conn, err := builder.CreateMetricsToLogs(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component, n.baseConsumer = conn, conn
+			n.Component, err = builder.CreateMetricsToLogs(ctx, set, next)
 		case component.DataTypeLogs:
-			conn, err := builder.CreateLogsToLogs(ctx, set, next)
-			if err != nil {
-				return err
-			}
-			n.Component = conn
-			// When connecting pipelines of the same data type, the connector must
-			// inherit the capabilities of pipelines in which it is acting as a receiver.
-			n.baseConsumer = capabilityconsumer.NewLogs(conn, capability)
+			n.Component, err = builder.CreateLogsToLogs(ctx, set, next)
 		}
 	}
-	return nil
+	return err
 }
 
 var _ consumerNode = &capabilitiesNode{}

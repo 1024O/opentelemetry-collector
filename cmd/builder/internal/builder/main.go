@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package builder // import "go.opentelemetry.io/collector/cmd/builder/internal/builder"
 
@@ -13,34 +24,12 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapio"
 )
 
 var (
 	// ErrGoNotFound is returned when a Go binary hasn't been found
 	ErrGoNotFound = errors.New("go binary not found")
 )
-
-func runGoCommand(cfg Config, args ...string) error {
-	cfg.Logger.Info("Running go subcommand.", zap.Any("arguments", args))
-	// #nosec G204 -- cfg.Distribution.Go is trusted to be a safe path and the caller is assumed to have carried out necessary input validation
-	cmd := exec.Command(cfg.Distribution.Go, args...)
-	cmd.Dir = cfg.Distribution.OutputPath
-
-	if cfg.Verbose {
-		writer := &zapio.Writer{Log: cfg.Logger}
-		defer func() { _ = writer.Close() }()
-		cmd.Stdout = writer
-		cmd.Stderr = writer
-		return cmd.Run()
-	}
-
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("go subcommand failed with args '%v': %w. Output:\n%s", args, err, out)
-	}
-
-	return nil
-}
 
 // GenerateAndCompile will generate the source files based on the given configuration, update go mod, and will compile into a binary
 func GenerateAndCompile(cfg Config) error {
@@ -58,10 +47,6 @@ func GenerateAndCompile(cfg Config) error {
 
 // Generate assembles a new distribution based on the given configuration
 func Generate(cfg Config) error {
-	if cfg.SkipGenerate {
-		cfg.Logger.Info("Skipping generating source codes.")
-		return nil
-	}
 	// create a warning message for non-aligned builder and collector base
 	if cfg.Distribution.OtelColVersion != defaultOtelColVersion {
 		cfg.Logger.Info("You're building a distribution with non-aligned version of the builder. Compilation may fail due to API changes. Please upgrade your builder or API", zap.String("builder-version", defaultOtelColVersion))
@@ -115,8 +100,11 @@ func Compile(cfg Config) error {
 	if cfg.Distribution.BuildTags != "" {
 		args = append(args, "-tags", cfg.Distribution.BuildTags)
 	}
-	if err := runGoCommand(cfg, args...); err != nil {
-		return fmt.Errorf("failed to compile the OpenTelemetry Collector distribution: %w", err)
+	// #nosec G204 -- cfg.Distribution.Go is trusted to be a safe path and the caller is  assumed to have carried out necessary input validation
+	cmd := exec.Command(cfg.Distribution.Go, args...)
+	cmd.Dir = cfg.Distribution.OutputPath
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to compile the OpenTelemetry Collector distribution: %w. Output:\n%s", err, out)
 	}
 	cfg.Logger.Info("Compiled", zap.String("binary", fmt.Sprintf("%s/%s", cfg.Distribution.OutputPath, cfg.Distribution.Name)))
 
@@ -130,13 +118,11 @@ func GetModules(cfg Config) error {
 		return nil
 	}
 
-	// ambiguous import: found package cloud.google.com/go/compute/metadata in multiple modules
-	if err := runGoCommand(cfg, "get", "cloud.google.com/go"); err != nil {
-		return fmt.Errorf("failed to go get: %w", err)
-	}
-
-	if err := runGoCommand(cfg, "mod", "tidy", "-compat=1.20"); err != nil {
-		return fmt.Errorf("failed to update go.mod: %w", err)
+	// #nosec G204 -- cfg.Distribution.Go is trusted to be a safe path
+	cmd := exec.Command(cfg.Distribution.Go, "mod", "tidy", "-compat=1.19")
+	cmd.Dir = cfg.Distribution.OutputPath
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to update go.mod: %w. Output:\n%s", err, out)
 	}
 
 	cfg.Logger.Info("Getting go modules")
@@ -145,8 +131,11 @@ func GetModules(cfg Config) error {
 	retries := 3
 	failReason := "unknown"
 	for i := 1; i <= retries; i++ {
-		if err := runGoCommand(cfg, "mod", "download"); err != nil {
-			failReason = err.Error()
+		// #nosec G204
+		cmd := exec.Command(cfg.Distribution.Go, "mod", "download")
+		cmd.Dir = cfg.Distribution.OutputPath
+		if out, err := cmd.CombinedOutput(); err != nil {
+			failReason = fmt.Sprintf("%s. Output:\n%s", err, out)
 			cfg.Logger.Info("Failed modules download", zap.String("retry", fmt.Sprintf("%d/%d", i, retries)))
 			time.Sleep(5 * time.Second)
 			continue

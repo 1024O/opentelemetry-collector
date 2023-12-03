@@ -1,5 +1,16 @@
 // Copyright The OpenTelemetry Authors
-// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package service
 
@@ -13,8 +24,6 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configtelemetry"
-	"go.opentelemetry.io/collector/service/extensions"
-	"go.opentelemetry.io/collector/service/pipelines"
 	"go.opentelemetry.io/collector/service/telemetry"
 )
 
@@ -46,20 +55,47 @@ func TestConfigValidate(t *testing.T) {
 				pipe.Processors = append(pipe.Processors, pipe.Processors...)
 				return cfg
 			},
-			expected: fmt.Errorf(`service::pipelines config validation failed: %w`, fmt.Errorf(`pipeline "traces": %w`, errors.New(`references processor "nop" multiple times`))),
+			expected: fmt.Errorf(`service::pipeline::traces: %w`, errors.New(`references processor "nop" multiple times`)),
+		},
+		{
+			name: "missing-pipeline-receivers",
+			cfgFn: func() *Config {
+				cfg := generateConfig()
+				cfg.Pipelines[component.NewID("traces")].Receivers = nil
+				return cfg
+			},
+			expected: fmt.Errorf(`service::pipeline::traces: %w`, errMissingServicePipelineReceivers),
+		},
+		{
+			name: "missing-pipeline-exporters",
+			cfgFn: func() *Config {
+				cfg := generateConfig()
+				cfg.Pipelines[component.NewID("traces")].Exporters = nil
+				return cfg
+			},
+			expected: fmt.Errorf(`service::pipeline::traces: %w`, errMissingServicePipelineExporters),
+		},
+		{
+			name: "missing-pipelines",
+			cfgFn: func() *Config {
+				cfg := generateConfig()
+				cfg.Pipelines = nil
+				return cfg
+			},
+			expected: errMissingServicePipelines,
 		},
 		{
 			name: "invalid-service-pipeline-type",
 			cfgFn: func() *Config {
 				cfg := generateConfig()
-				cfg.Pipelines[component.NewID("wrongtype")] = &pipelines.PipelineConfig{
+				cfg.Pipelines[component.NewID("wrongtype")] = &PipelineConfig{
 					Receivers:  []component.ID{component.NewID("nop")},
 					Processors: []component.ID{component.NewID("nop")},
 					Exporters:  []component.ID{component.NewID("nop")},
 				}
 				return cfg
 			},
-			expected: fmt.Errorf(`service::pipelines config validation failed: %w`, errors.New(`pipeline "wrongtype": unknown datatype "wrongtype"`)),
+			expected: errors.New(`service::pipeline::wrongtype: unknown datatype "wrongtype"`),
 		},
 		{
 			name: "invalid-telemetry-metric-config",
@@ -99,8 +135,8 @@ func generateConfig() *Config {
 				Address: ":8080",
 			},
 		},
-		Extensions: extensions.Config{component.NewID("nop")},
-		Pipelines: pipelines.Config{
+		Extensions: []component.ID{component.NewID("nop")},
+		Pipelines: map[component.ID]*PipelineConfig{
 			component.NewID("traces"): {
 				Receivers:  []component.ID{component.NewID("nop")},
 				Processors: []component.ID{component.NewID("nop")},

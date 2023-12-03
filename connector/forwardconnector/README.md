@@ -2,9 +2,9 @@
 
 | Status                   |                                                           |
 |------------------------- |---------------------------------------------------------- |
-| Stability                | [beta]                                          |
+| Stability                | [Alpha]                                          |
 | Supported pipeline types | See [Supported Pipeline Types](#supported-pipeline-types) |
-| Distributions            | [core, contrib]                                                        |
+| Distributions            | []                                                        |
 
 The `forward` connector can merge or fork pipelines of the same type.
 
@@ -122,9 +122,7 @@ service:
   #   exporters: [logging]
 ```
 
-[beta]:https://github.com/open-telemetry/opentelemetry-collector#beta
-[core]:https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol
-[contrib]:https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-contrib
+[Alpha]:https://github.com/open-telemetry/opentelemetry-collector#alpha
 [Connectors README]:https://github.com/open-telemetry/opentelemetry-collector/blob/main/connector/README.md
 [Exporter Pipeline Type]:https://github.com/open-telemetry/opentelemetry-collector/blob/main/connector/README.md#exporter-pipeline-type
 [Receiver Pipeline Type]:https://github.com/open-telemetry/opentelemetry-collector/blob/main/connector/README.md#receiver-pipeline-type
